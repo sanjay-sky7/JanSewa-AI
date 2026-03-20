@@ -27,12 +27,21 @@ class Settings(BaseSettings):
     # ── AI / ML API keys ────────────────────────────────
     GEMINI_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    GOOGLE_VISION_ENABLED: bool = True
 
     # ── External services ───────────────────────────────
     GOOGLE_MAPS_API_KEY: Optional[str] = None
     TWITTER_BEARER_TOKEN: Optional[str] = None
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_SMS_FROM: Optional[str] = None
+    TWILIO_WHATSAPP_FROM: Optional[str] = None
+
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
 
     # ── Cloudinary ──────────────────────────────────────
     CLOUDINARY_URL: Optional[str] = None

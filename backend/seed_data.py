@@ -93,18 +93,37 @@ def seed():
             ("Sanjay Gupta", "sanjay@jansewa.gov", "WORKER", "Roads Department", 3),
             ("Meena Devi", "meena@jansewa.gov", "WORKER", "Sanitation Department", 6),
             ("Arjun Yadav", "arjun@jansewa.gov", "WORKER", "Electricity Department", 9),
+            ("Nikhil Sharma", "nikhil@jansewa.gov", "OFFICER", "Public Works Officer", 3),
+            ("Ananya Rao", "ananya@jansewa.gov", "ENGINEER", "Roads Engineer", 3),
             ("Admin User", "admin@jansewa.gov", "ADMIN", "IT", None),
         ]
-        existing = db.query(User).count()
-        if existing == 0:
-            for name, email, role, dept, wid in users_data:
-                db.add(User(
-                    name=name, email=email, role=role,
-                    department=dept, ward_id=wid,
-                    password_hash=pw, phone=f"+9198{random.randint(10000000,99999999)}",
-                ))
+        ward_id_by_number = {
+            w.ward_number: w.id
+            for w in db.query(Ward).all()
+        }
+        existing_users_by_email = {
+            u.email: u
+            for u in db.query(User).all()
+            if u.email
+        }
+        seeded_users = 0
+        for name, email, role, dept, wid in users_data:
+            if email in existing_users_by_email:
+                continue
+            db.add(User(
+                name=name,
+                email=email,
+                role=role,
+                department=dept,
+                ward_id=ward_id_by_number.get(wid) if wid is not None else None,
+                password_hash=pw,
+                phone=f"+9198{random.randint(10000000,99999999)}",
+            ))
+            seeded_users += 1
+
+        if seeded_users:
             db.flush()
-            print(f"  ✅ Seeded {len(users_data)} users")
+            print(f"  ✅ Seeded {seeded_users} demo users")
 
         # ── 4. CITIZENS (20) ────────────────────────────
         citizen_names = [
@@ -116,11 +135,12 @@ def seed():
         ]
         existing = db.query(Citizen).count()
         if existing == 0:
+            ward_ids = [w.id for w in db.query(Ward).all()]
             for name in citizen_names:
                 db.add(Citizen(
                     name=name,
                     phone=f"+9199{random.randint(10000000,99999999)}",
-                    ward_id=random.randint(1, 15),
+                    ward_id=random.choice(ward_ids) if ward_ids else None,
                     is_anonymous=random.random() < 0.15,
                 ))
             db.flush()
@@ -188,12 +208,15 @@ def seed():
         if existing == 0:
             citizens = db.query(Citizen).all()
             users = db.query(User).filter(User.role == "WORKER").all()
+            wards = db.query(Ward).all()
+            ward_ids = [w.id for w in wards]
             categories = db.query(Category).all()
             cat_map = {c.name: c.id for c in categories}
+            other_category_id = cat_map.get("Other")
 
             for i, (text, lang, cat_name, score) in enumerate(complaint_texts):
                 citizen = random.choice(citizens)
-                ward_id = random.randint(1, 15)
+                ward_id = random.choice(ward_ids) if ward_ids else None
                 status = random.choice(statuses)
                 created = datetime.utcnow() - timedelta(
                     days=random.randint(0, 30),
@@ -206,15 +229,17 @@ def seed():
                     "MEDIUM" if score >= 40 else "LOW"
                 )
 
+                assignee_id = random.choice(users).id if users and status != "OPEN" else None
+
                 c = Complaint(
                     citizen_id=citizen.id,
-                    category_id=cat_map.get(cat_name, 8),
+                    category_id=cat_map.get(cat_name, other_category_id),
                     ward_id=ward_id,
                     raw_text=text,
                     input_type=random.choice(["text", "text", "text", "voice", "image"]),
                     source_language=lang,
                     ai_summary=text[:120],
-                    ai_location=f"Ward {ward_id} area",
+                    ai_location=f"Ward {ward_id} area" if ward_id is not None else "Ward area",
                     ai_duration_days=random.choice([1, 2, 3, 5, 7, 14, 30, None]),
                     ai_category_confidence=round(random.uniform(0.75, 0.98), 2),
                     urgency_score=min(100, score + random.randint(-5, 5)),
@@ -225,8 +250,8 @@ def seed():
                     final_priority_score=score,
                     priority_level=priority_level,
                     status=status,
-                    assigned_to=random.choice(users).id if status != "OPEN" else None,
-                    assigned_at=created + timedelta(hours=1) if status != "OPEN" else None,
+                    assigned_to=assignee_id,
+                    assigned_at=created + timedelta(hours=1) if assignee_id else None,
                     resolved_at=(
                         created + timedelta(days=random.randint(1, 5))
                         if status in ("VERIFIED", "CLOSED") else None
@@ -342,7 +367,8 @@ def seed():
         # ── 8. TRUST SCORES (15 wards × 7 days) ────────
         existing = db.query(TrustScore).count()
         if existing == 0:
-            for ward_id in range(1, 16):
+            for ward in db.query(Ward).all():
+                ward_id = ward.id
                 base_trust = random.uniform(45, 92)
                 for day_offset in range(7):
                     d = date.today() - timedelta(days=day_offset)

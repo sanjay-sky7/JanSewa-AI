@@ -1,101 +1,403 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FiArrowLeft, FiCheckCircle, FiEye, FiEyeOff, FiKey, FiLock, FiMail, FiUser } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import LiveDateTime from '../components/Common/LiveDateTime';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, register, forgotPassword } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
+  const [mode, setMode] = useState('login');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registerRole, setRegisterRole] = useState('CITIZEN');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
+  const [welcomeName, setWelcomeName] = useState('');
+
+  const resetMessages = () => {
+    setError('');
+    setSuccess('');
+  };
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    resetMessages();
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    resetMessages();
+
+    if (mode === 'forgot') {
+      if (!password || password.length < 8) {
+        setError(t('login_err_new_password_length', 'New password must be at least 8 characters long.'));
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError(t('login_err_password_mismatch', 'Passwords do not match.'));
+        return;
+      }
+    }
+
     setLoading(true);
+
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      if (mode === 'forgot') {
+        await forgotPassword({
+          email: email.trim(),
+          new_password: password,
+        });
+        setSuccess(t('login_success_password_updated', 'Password updated. You can now sign in with your new password.'));
+        setPassword('');
+        setConfirmPassword('');
+        setMode('login');
+      } else if (mode === 'register') {
+        await register({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          role: registerRole,
+        });
+        setSuccess(t('login_success_account_created', 'Account created successfully. Signing you in...'));
+        const profile = await login(email.trim(), password);
+        navigate(profile.role === 'CITIZEN' ? '/register-complaint' : '/dashboard');
+      } else {
+        const profile = await login(email.trim(), password);
+        const resolvedName = profile?.name || t('login_user_fallback', 'User');
+        setWelcomeName(resolvedName);
+        setShowWelcomeOverlay(true);
+        setSuccess(`${t('login_success_welcome_prefix', 'Welcome back')}, ${resolvedName}!`);
+        await new Promise((resolve) => setTimeout(resolve, 1700));
+        setShowWelcomeOverlay(false);
+        navigate(profile.role === 'CITIZEN' ? '/register-complaint' : '/dashboard');
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      const fallback =
+        mode === 'register'
+          ? t('login_err_registration_failed', 'Registration failed. Please try again.')
+          : mode === 'forgot'
+            ? t('login_err_reset_failed', 'Password reset failed. Please try again.')
+            : t('login_err_login_failed', 'Login failed. Please try again.');
+      setError(err.response?.data?.detail || fallback);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary-600 flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-3xl">J</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Jansewa <span className="text-primary-600">AI</span>
-          </h1>
-          <p className="text-gray-500 mt-1">AI-Powered Governance Intelligence Platform</p>
-        </div>
+  const titleByMode = {
+    login: t('login_welcome_back', 'Welcome back'),
+    register: t('login_create_account_title', 'Create your account'),
+    forgot: t('login_reset_password_title', 'Reset your password'),
+  };
 
-        {/* Card */}
-        <div className="card p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+  const subtitleByMode = {
+    login: t('login_subtitle_signin', 'Sign in to monitor complaints, trust signals, and response workflows.'),
+    register: t('login_subtitle_register', 'Set up your account to start managing governance operations.'),
+    forgot: t('login_subtitle_forgot', 'Enter your email and set a fresh password to regain access.'),
+  };
+
+  const actionLabel =
+    mode === 'register'
+      ? t('login_create_account', 'Create Account')
+      : mode === 'forgot'
+        ? t('login_reset_password', 'Reset Password')
+        : t('login_sign_in', 'Sign In');
+
+  return (
+    <div className="auth-bg relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-8">
+      <div className="pointer-events-none absolute -left-20 top-14 h-80 w-80 rounded-full bg-[#ff9933]/12 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-24 h-96 w-96 rounded-full bg-[#138808]/12 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-10 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-[#0a2a63]/12 blur-3xl" />
+
+      {showWelcomeOverlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-[#0a2a63] via-[#1d4ed8] to-[#138808] p-6 text-white shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 animate-ping rounded-full bg-white/30" />
+                <div className="relative rounded-full bg-white/20 p-2">
+                  <FiCheckCircle className="h-6 w-6 text-emerald-100" />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-cyan-100">{t('login_welcome_badge', 'Signed In')}</p>
+                <p className="text-xl font-bold">{t('login_success_welcome_prefix', 'Welcome back')}, {welcomeName}!</p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-cyan-100">{t('login_success_redirecting', 'Redirecting to your dashboard...')}</p>
+            <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-white/20">
+              <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-[#ff9933] to-[#bbf7d0]" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mx-auto grid max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/90 shadow-2xl backdrop-blur lg:grid-cols-2">
+        <section className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(255,153,51,0.34),transparent_38%),radial-gradient(circle_at_88%_16%,rgba(56,189,248,0.25),transparent_32%),linear-gradient(145deg,#0f172a_2%,#0a2a63_45%,#0d9488_72%,#138808_100%)] p-10 text-slate-100 lg:block">
+          <div className="absolute -left-24 top-14 h-72 w-72 rounded-full bg-[#ff9933]/25 blur-3xl" />
+          <div className="absolute right-0 top-10 h-48 w-48 rounded-full bg-white/15 blur-2xl" />
+          <div className="absolute -right-16 bottom-8 h-72 w-72 rounded-full bg-[#138808]/25 blur-3xl" />
+          <div className="absolute -right-24 -top-16 h-64 w-64 rounded-full border border-white/20" />
+
+          <div className="relative z-10">
+            <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/25 bg-black/20 px-4 py-2 text-sm">
+              <FiCheckCircle className="h-4 w-4 text-[#7dd3fc]" />
+              {t('login_trusted_hub', 'Trusted civic operations hub')}
+            </div>
+
+            <h1 className="max-w-sm text-5xl font-black leading-tight tracking-tight">
+              <span className="text-[#ffd08f]">Jansewa</span> <span className="text-[#9ef0c6]">AI</span>
+            </h1>
+            <p className="mt-3 text-lg font-semibold text-white">{t('login_empowering_citizens', 'Empowering citizens')}</p>
+            <p className="mt-4 max-w-md text-slate-200/95 leading-relaxed">
+              {t('login_command_center', 'Operational command center for grievance intake, triage, and transparent follow-up.')}
+            </p>
+
+            <div className="mt-7 grid grid-cols-3 gap-3">
+              <InfoMini title="Active Wards" value="15" />
+              <InfoMini title="Live Ops" value="24x7" />
+              <InfoMini title="AI Routing" value="Enabled" />
+            </div>
+
+            <div className="mt-7 flex items-center gap-3">
+              <LiveDateTime tone="dark" />
+            </div>
+          </div>
+        </section>
+
+        <section className="p-6 sm:p-10 lg:p-12 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)]">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h2 className="text-4xl font-black tracking-tight text-slate-900">{titleByMode[mode]}</h2>
+              <p className="mt-2 text-sm text-slate-600">{subtitleByMode[mode]}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-3.5 py-2.5 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-primary-700 via-cyan-600 to-blue-800 flex items-center justify-center shadow-md ring-1 ring-primary-200/70">
+                  <svg className="w-6 h-6" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M24 4L39 12V24C39 33.5 32.5 41 24 44C15.5 41 9 33.5 9 24V12L24 4Z" fill="white" fillOpacity="0.95"/>
+                    <path d="M24 10L34 15V24C34 30.4 29.8 36 24 38.2C18.2 36 14 30.4 14 24V15L24 10Z" fill="url(#loginBrandCore)"/>
+                    <path d="M18 23.5L22 27.5L30 19.5" stroke="white" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <defs>
+                      <linearGradient id="loginBrandCore" x1="14" y1="10" x2="34" y2="38.2" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#0EA5E9"/>
+                        <stop offset="1" stopColor="#2563EB"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <div className="leading-tight">
+                  <p className="text-xl font-black tracking-tight text-[#0a2a63]">Jansewa <span className="text-primary-600">AI</span></p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Civic Response Platform</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-5 flex flex-wrap gap-2">
+            {[t('login_chip_secure', 'Secure Login'), t('login_chip_fast', 'Fast Access'), t('login_chip_role', 'Role Aware')].map((chip) => (
+              <span key={chip} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700">
+                {chip}
+              </span>
+            ))}
+          </div>
+
+          {mode !== 'forgot' && (
+            <div className="mb-7 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className={`rounded-lg py-2 text-sm font-semibold transition ${
+                  mode === 'login'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t('login_sign_in', 'Sign In')}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('register')}
+                className={`rounded-lg py-2 text-sm font-semibold transition ${
+                  mode === 'register'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t('login_create_account', 'Create Account')}
+              </button>
+            </div>
+          )}
+
+          {mode === 'forgot' && (
+            <button
+              type="button"
+              onClick={() => switchMode('login')}
+              className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-900"
+            >
+              <FiArrowLeft className="h-4 w-4" />
+              {t('login_back_to_signin', 'Back to sign in')}
+            </button>
+          )}
 
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {success && (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {success}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="on">
+            {mode === 'register' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_full_name', 'Full name')}</label>
+                <div className="relative">
+                  <FiUser className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                    placeholder={t('login_your_full_name', 'Your full name')}
+                    autoComplete="name"
+                  />
+                </div>
+              </div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_account_type', 'Account type')}</label>
+                <select
+                  value={registerRole}
+                  onChange={(e) => setRegisterRole(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white py-3 px-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                >
+                  <option value="CITIZEN">{t('login_role_citizen', 'Citizen')}</option>
+                  <option value="LEADER">{t('login_role_leader', 'Leader')}</option>
+                  <option value="WORKER">{t('login_role_worker', 'Worker')}</option>
+                </select>
+              </div>
+            )}
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
-                  focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                placeholder="leader@jansewa.ai"
-              />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_email', 'Email address')}</label>
+              <div className="relative">
+                <FiMail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                  placeholder={t('login_email_placeholder', 'name@domain.gov')}
+                  autoComplete="email"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
-                  focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                placeholder="••••••••"
-              />
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">
+                  {mode === 'forgot' ? t('login_new_password', 'New password') : t('login_password', 'Password')}
+                </label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot')}
+                    className="text-xs font-semibold text-[#0b4d95] transition hover:text-[#0a2a63]"
+                  >
+                    {t('login_forgot_password', 'Forgot password?')}
+                  </button>
+                )}
+              </div>
+
+              <div className="relative">
+                <FiLock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#ff9933] focus:ring-4 focus:ring-[#ffe4c7]"
+                  placeholder={t('login_password_placeholder', 'At least 8 characters')}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
+                  aria-label={showPassword ? t('login_hide_password', 'Hide password') : t('login_show_password', 'Show password')}
+                >
+                  {showPassword ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
+
+            {mode === 'forgot' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_confirm_new_password', 'Confirm new password')}</label>
+                <div className="relative">
+                  <FiKey className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#138808] focus:ring-4 focus:ring-[#d8f5d3]"
+                    placeholder={t('login_confirm_password_placeholder', 'Re-enter your new password')}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
+                    aria-label={showConfirmPassword ? t('login_hide_password', 'Hide password') : t('login_show_password', 'Show password')}
+                  >
+                    {showConfirmPassword ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-medium
-                hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full rounded-xl bg-gradient-to-r from-[#ff9933] to-[#138808] py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading ? t('login_please_wait', 'Please wait...') : actionLabel}
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 pt-5 border-t border-gray-100">
-            <p className="text-xs font-medium text-gray-500 mb-2">Demo credentials</p>
-            <div className="space-y-1 text-xs text-gray-600">
-              <p><span className="font-medium">Leader:</span> rajesh.kumar@jansewa.ai / password123</p>
-              <p><span className="font-medium">Dept Head:</span> priya.sharma@jansewa.ai / password123</p>
-              <p><span className="font-medium">Worker:</span> amit.verma@jansewa.ai / password123</p>
-            </div>
+          <div className="mt-7 border-t border-slate-200 pt-5 text-xs text-slate-500">
+            {t('login_secure_access', 'Secure access for authorized civic operations teams.')}
           </div>
-        </div>
+        </section>
       </div>
+    </div>
+  );
+}
+
+function InfoMini({ title, value }) {
+  return (
+    <div className="rounded-2xl border border-white/20 bg-white/12 p-3.5 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
+      <p className="text-[10px] uppercase tracking-[0.12em] text-slate-200/90">{title}</p>
+      <p className="mt-1 text-[1.65rem] leading-none font-black text-white">{value}</p>
     </div>
   );
 }

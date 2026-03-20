@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -7,6 +5,10 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://jansewa:jansewa_secret@postgres:5432/jansewa_db
+      DATABASE_SYNC_URL: postgresql://jansewa:jansewa_secret@postgres:5432/jansewa_db
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,7 +36,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jansewa"]
+      test: ["CMD-SHELL", "pg_isready -U jansewa -d jansewa_db"]
       interval: 5s
       timeout: 5s
       retries: 5

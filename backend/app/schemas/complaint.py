@@ -11,23 +11,29 @@ from pydantic import BaseModel, Field
 
 class ComplaintCreate(BaseModel):
     raw_text: Optional[str] = None
+    raw_audio_url: Optional[str] = None
+    raw_image_url: Optional[str] = None
+    geo_latitude: Optional[float] = None
+    geo_longitude: Optional[float] = None
     input_type: str = Field(..., pattern="^(text|voice|image|social)$")
     source_language: Optional[str] = None
     citizen_name: Optional[str] = None
     citizen_phone: Optional[str] = None
     ward_id: Optional[int] = None
+    category_id: Optional[int] = None
     is_anonymous: bool = False
 
 
 class ComplaintAssign(BaseModel):
     assigned_to: uuid.UUID
     department: Optional[str] = None
+    assignee_role: Optional[str] = None
 
 
 class ComplaintStatusUpdate(BaseModel):
     status: str = Field(
         ...,
-        pattern="^(OPEN|ASSIGNED|IN_PROGRESS|VERIFICATION_PENDING|VERIFIED|CLOSED)$",
+        pattern="^(OPEN|UNDER_REVIEW|ASSIGNED|IN_PROGRESS|VERIFICATION_PENDING|RESOLVED|VERIFIED|CLOSED)$",
     )
     notes: Optional[str] = None
 
@@ -127,3 +133,59 @@ class ComplaintStats(BaseModel):
     avg_trust_score: float
     total_complaints: int
     total_resolved: int
+    total_pending: Optional[int] = None
+    total_in_progress: Optional[int] = None
+    avg_resolution_hours: Optional[float] = None
+
+
+class ComplaintFeedbackOut(BaseModel):
+    complaint_id: uuid.UUID
+    complaint_summary: Optional[str] = None
+    action: str
+    status: Optional[str] = None
+    feedback_note: Optional[str] = None
+    notification_message: str
+    performed_by_name: Optional[str] = None
+    performed_at: datetime
+
+
+class ComplaintNotificationOut(BaseModel):
+    complaint_id: uuid.UUID
+    complaint_summary: Optional[str] = None
+    status: Optional[str] = None
+    feedback_note: Optional[str] = None
+    notification_message: str
+    performed_by_name: Optional[str] = None
+    performed_at: datetime
+    is_read: bool = False
+    is_recent: bool = False
+
+
+class ComplaintNotificationListOut(BaseModel):
+    items: List[ComplaintNotificationOut]
+    total: int
+    unread_count: int = 0
+
+
+class NotificationSeenOut(BaseModel):
+    message: str
+    unread_count: int = 0
+
+
+class AssignmentRecommendationItem(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    role: str
+    department: Optional[str] = None
+    ward_id: Optional[int] = None
+    suitability_score: int
+    reason: str
+
+
+class AssignmentRecommendationOut(BaseModel):
+    complaint_id: uuid.UUID
+    category: Optional[str] = None
+    required_department: Optional[str] = None
+    recommended_role: str
+    escalation_role: Optional[str] = None
+    candidates: List[AssignmentRecommendationItem]

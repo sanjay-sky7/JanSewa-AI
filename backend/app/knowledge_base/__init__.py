@@ -53,6 +53,8 @@ from app.knowledge_base.social_analysis import (
     analyze_social_post,
     analyze_social_batch,
 )
+from app.knowledge_base.workforce_assignment import recommend_assignees
+from app.knowledge_base.help_center import get_help_center_content
 
 __all__ = [
     # Categories
@@ -73,4 +75,8 @@ __all__ = [
     "get_estimated_hours", "get_required_resources",
     # Social
     "analyze_social_post", "analyze_social_batch",
+    # Workforce assignment
+    "recommend_assignees",
+    # Help center
+    "get_help_center_content",
 ]

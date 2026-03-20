@@ -47,11 +47,19 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (payload) => {
     const { data } = await authAPI.register(payload);
-    localStorage.setItem('jansewa_token', data.access_token);
-    const { data: profile } = await authAPI.me();
-    setUser(profile);
-    localStorage.setItem('jansewa_user', JSON.stringify(profile));
-    return profile;
+    return data;
+  }, []);
+
+  const updateProfile = useCallback(async (payload) => {
+    const { data } = await authAPI.updateMe(payload);
+    setUser(data);
+    localStorage.setItem('jansewa_user', JSON.stringify(data));
+    return data;
+  }, []);
+
+  const forgotPassword = useCallback(async (payload) => {
+    const { data } = await authAPI.forgotPassword(payload);
+    return data;
   }, []);
 
   const logout = useCallback(() => {
@@ -66,7 +74,9 @@ export function AuthProvider({ children }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, hasRole }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, register, forgotPassword, updateProfile, logout, hasRole }}
+    >
       {children}
     </AuthContext.Provider>
   );

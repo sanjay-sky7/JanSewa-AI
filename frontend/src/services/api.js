@@ -1,15 +1,17 @@
 /**
  * Axios API client — central HTTP layer.
  */
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL ||"";
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 30_000,
+  headers: { "Content-Type": "application/json" },
+  timeout: 30000,
 });
+
+
 
 // ── Interceptor: attach JWT ────────────────────────────
 api.interceptors.request.use((config) => {
@@ -37,14 +39,20 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   register: (data) => api.post('/auth/register', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
   me: () => api.get('/auth/me'),
+  updateMe: (data) => api.put('/auth/me', data),
 };
 
 // ── Complaints ──────────────────────────────────────────
 export const complaintsAPI = {
   create: (data) => api.post('/complaints', data),
+  categories: () => api.get('/complaints/categories'),
   list: (params) => api.get('/complaints', { params }),
+  myNotifications: (params) => api.get('/complaints/citizen/notifications', { params }),
+  markNotificationsSeen: () => api.post('/complaints/citizen/notifications/mark-seen'),
   get: (id) => api.get(`/complaints/${id}`),
+  latestFeedback: (id) => api.get(`/complaints/${id}/feedback`),
   priorityQueue: (params) => api.get('/complaints/priority-queue', { params }),
   stats: () => api.get('/complaints/stats'),
   byWard: (wardId, params) => api.get(`/complaints/ward/${wardId}`, { params }),
@@ -85,10 +93,12 @@ export const dashboardAPI = {
 
 // ── Public Portal ───────────────────────────────────────
 export const publicAPI = {
+  wardMap: () => api.get('/public/wards/map'),
   wardScorecard: (wardId) => api.get(`/public/ward/${wardId}/scorecard`),
   recentActions: (wardId) => api.get(`/public/ward/${wardId}/actions`),
   wardTrust: (wardId) => api.get(`/public/ward/${wardId}/trust`),
   submitComplaint: (data) => api.post('/public/complaint', data),
+  helpCenter: (params) => api.get('/public/help-center', { params }),
 };
 
 export default api;

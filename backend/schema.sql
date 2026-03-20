@@ -176,6 +176,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     performed_at TIMESTAMP DEFAULT NOW()
 );
 
+-- ── NOTIFICATION READ STATE ───────────────────────────
+CREATE TABLE IF NOT EXISTS notification_states (
+    user_id UUID PRIMARY KEY REFERENCES users(id),
+    last_seen_at TIMESTAMP DEFAULT NOW()
+);
+
 -- ── INDEXES ─────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_complaints_ward ON complaints(ward_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status);

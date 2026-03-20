@@ -1,9 +1,9 @@
 export default function Footer() {
   return (
-    <footer className="bg-white border-t border-gray-200 py-4 px-6">
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-gray-500">
-        <p>&copy; {new Date().getFullYear()} Jansewa AI — AI-Powered Governance Intelligence Platform</p>
-        <p>Built for Smart India Hackathon 2025</p>
+    <footer className="mt-6 border-t border-slate-200 bg-white/85 px-6 py-4 backdrop-blur-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-600">
+        <p className="font-medium">&copy; {new Date().getFullYear()} Jansewa AI • Governance Intelligence Platform</p>
+        <p className="text-slate-700">Built for transparent and accountable civic response.</p>
       </div>
     </footer>
   );

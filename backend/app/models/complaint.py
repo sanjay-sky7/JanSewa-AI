@@ -26,7 +26,8 @@ class Complaint(Base):
     # ── Raw input ────────────────────────────────────────
     raw_text: Mapped[str] = mapped_column(Text, nullable=True)
     raw_audio_url: Mapped[str] = mapped_column(String(500), nullable=True)
-    raw_image_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    # Data URL uploads can be several KB/MB; store as TEXT to avoid truncation.
+    raw_image_url: Mapped[str] = mapped_column(Text, nullable=True)
     input_type: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # text, voice, image, social

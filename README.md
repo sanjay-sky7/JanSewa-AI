@@ -1,6 +1,6 @@
 # 🏛️ Jansewa AI — AI-Powered Governance Intelligence Platform
 
-> **Smart India Hackathon 2025–2026** | Problem Statement: AI-Powered Real-Time Governance Intelligence for Indian Local Bodies
+> **Sankalp hackathon 2025–2026** | Problem Statement: AI-Powered Real-Time Governance Intelligence for Indian Local Bodies
 
 An end-to-end AI platform that empowers **elected local body leaders** with real-time intelligence for transparent, data-driven governance — from multilingual complaint intake to 4-layer verification and AI-generated communications.
 
@@ -80,6 +80,7 @@ Request → KB Analysis (always works, 0ms API latency)
 ```bash
 # Clone the repository
 git clone https://github.com/teaminfinimind/jansewa-ai.git
+git clone https://github.com/sanjay-sky7/JanSewa-AI
 cd jansewa-ai
 
 # Configure environment
@@ -98,6 +99,11 @@ docker compose up --build
 | **API Docs (Swagger)** | http://localhost:8000/docs |
 | **PostgreSQL** | localhost:5432 |
 | **Redis** | localhost:6379 |
+
+Note:
+- Open the app UI at http://localhost:3000.
+- http://localhost:8000 is the backend API server (JSON responses).
+- API root is available at http://localhost:8000/ and health check at http://localhost:8000/api/health.
 
 ### Option B: Manual Setup
 
@@ -156,8 +162,17 @@ npm run dev
 | `CLOUDINARY_URL` | Cloudinary image uploads | ❌ Optional |
 | `TWILIO_ACCOUNT_SID` | Twilio SMS (if enabled) | ❌ Optional |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token | ❌ Optional |
+| `TWILIO_SMS_FROM` | Twilio SMS sender number (E.164) | ❌ Optional |
+| `TWILIO_WHATSAPP_FROM` | Twilio WhatsApp sender number | ❌ Optional |
+| `SMTP_HOST` | SMTP host for email notifications | ❌ Optional |
+| `SMTP_PORT` | SMTP port (default `587`) | ❌ Optional |
+| `SMTP_USERNAME` | SMTP username | ❌ Optional |
+| `SMTP_PASSWORD` | SMTP password | ❌ Optional |
+| `SMTP_FROM_EMAIL` | Sender email for complaint updates | ❌ Optional |
 
 > **Zero API keys needed** to run the full platform. The Knowledge Base provides complaint classification, priority scoring, communications, and social analysis offline.
+
+For complaint confirmations over SMS/WhatsApp, set all four Twilio variables (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM`, `TWILIO_WHATSAPP_FROM`). If these are placeholders or missing, complaint registration still works but external message delivery is skipped.
 
 ---
 
@@ -263,10 +278,13 @@ jansewa-ai/
 |--------|----------|-------------|------|
 | POST | `/api/complaints` | Create complaint (runs AI pipeline: NLP + priority scoring) | No |
 | GET | `/api/complaints` | List complaints (paginated, filter by status/ward/category/priority/search) | No |
+| GET | `/api/complaints/citizen/notifications` | Citizen notification feed for status/assignment updates | Yes |
+| POST | `/api/complaints/citizen/notifications/mark-seen` | Mark citizen notifications as seen | Yes |
 | GET | `/api/complaints/priority-queue` | Priority-sorted active complaints | No |
 | GET | `/api/complaints/stats` | Complaint statistics (open, critical, resolved) | No |
 | GET | `/api/complaints/ward/{ward_id}` | Complaints by ward | No |
 | GET | `/api/complaints/{complaint_id}` | Single complaint detail | No |
+| GET | `/api/complaints/{complaint_id}/feedback` | Latest leader feedback for complaint | Yes |
 | PUT | `/api/complaints/{complaint_id}/assign` | Assign complaint to worker | Yes |
 | PUT | `/api/complaints/{complaint_id}/status` | Update complaint status | Yes |
 
@@ -431,6 +449,26 @@ Defined in `.github/workflows/deploy.yml` — triggers on push/PR to `main`:
 **Frontend Job** (Node 20):
 1. Install dependencies → Lint with `eslint` → Build
 2. Deploy to Vercel (on `main` push)
+
+---
+
+## ✅ Quick API Smoke Test
+
+Use this script to validate key citizen flows after local changes:
+- Auth register/login + profile update
+- Voice complaint upload without typed text
+- Image complaint upload path
+
+```powershell
+cd backend
+./scripts/smoke-test-voice-image.ps1
+```
+
+Optional custom base URL:
+
+```powershell
+./scripts/smoke-test-voice-image.ps1 -BaseUrl "http://localhost:8000/api"
+```
 
 ---
 

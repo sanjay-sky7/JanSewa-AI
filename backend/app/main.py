@@ -24,7 +24,7 @@ from app.routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db()
+    
     yield
     # Shutdown (nothing to tear down for now)
 
@@ -59,6 +59,16 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Health check ─────────────────────────────────────────
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "message": "Jansewa AI backend is running",
+        "docs": "/docs",
+        "health": "/api/health",
+        "api_base": "/api",
+    }
+
+
 @app.get("/api/health", tags=["Health"])
 async def health_check():
     return {

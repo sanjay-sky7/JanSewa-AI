@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy import text
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
@@ -47,3 +48,14 @@ async def init_db():
     """Create all tables (dev convenience — use Alembic in prod)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Keep local/dev schemas resilient when model fields evolve.
+        if conn.dialect.name == "postgresql":
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE complaints
+                    ALTER COLUMN raw_image_url TYPE TEXT
+                    """
+                )
+            )

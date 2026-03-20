@@ -18,7 +18,7 @@ class User(Base):
     phone: Mapped[str] = mapped_column(String(15), nullable=True)
     role: Mapped[str] = mapped_column(
         String(20), nullable=False
-    )  # LEADER, DEPARTMENT_HEAD, WORKER, ADMIN
+    )  # CITIZEN, LEADER, DEPARTMENT_HEAD, WORKER, OFFICER, ENGINEER, ADMIN
     department: Mapped[str] = mapped_column(String(255), nullable=True)
     ward_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("wards.id"), nullable=True

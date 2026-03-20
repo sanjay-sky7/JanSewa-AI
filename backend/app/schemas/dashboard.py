@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 
 # ── Auth ─────────────────────────────────────────────────
@@ -18,10 +18,22 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
-    role: str = Field(default="LEADER", pattern="^(LEADER|DEPARTMENT_HEAD|WORKER|ADMIN)$")
+    role: str = Field(default="CITIZEN", pattern="^(CITIZEN|LEADER|DEPARTMENT_HEAD|WORKER|OFFICER|ENGINEER|ADMIN)$")
     department: Optional[str] = None
     ward_id: Optional[int] = None
     phone: Optional[str] = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    ward_id: Optional[int] = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+    new_password: str = Field(min_length=8)
 
 
 class TokenOut(BaseModel):
@@ -34,9 +46,12 @@ class UserOut(BaseModel):
     id: uuid.UUID
     name: str
     email: Optional[str] = None
+    phone: Optional[str] = None
     role: str
     department: Optional[str] = None
     ward_id: Optional[int] = None
+    ward_number: Optional[int] = None
+    ward_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -146,11 +161,28 @@ class WardScorecard(BaseModel):
     ward_id: int
     ward_name: str
     ward_number: int
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     total_complaints: int
     total_resolved: int
+    resolved: int
+    pending: int
     resolution_rate: float
     avg_response_hours: float
+    avg_resolution_hours: float
     trust_score: float
+
+
+class PublicWardMapItem(BaseModel):
+    ward_id: int
+    ward_number: int
+    ward_name: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    total_complaints: int = 0
+    open_complaints: int = 0
+    resolved_complaints: int = 0
+    trust_score: Optional[float] = None
 
 
 class PublicAction(BaseModel):
@@ -174,3 +206,21 @@ class TrustScoreOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class HelpArticleOut(BaseModel):
+    id: str
+    title: str
+    category: str
+    audience: list[str]
+    summary: str
+    steps: list[str]
+    keywords: list[str]
+
+
+class HelpCenterOut(BaseModel):
+    query: Optional[str] = None
+    role: Optional[str] = None
+    total_articles: int
+    categories: list[str]
+    articles: list[HelpArticleOut]

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS citizens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255),
     phone VARCHAR(15) UNIQUE,
+    email VARCHAR(255),
     ward_id INTEGER REFERENCES wards(id),
     is_anonymous BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT NOW()
@@ -182,6 +183,20 @@ CREATE TABLE IF NOT EXISTS notification_states (
     last_seen_at TIMESTAMP DEFAULT NOW()
 );
 
+-- ── NOTIFICATION LOGS ────────────────────────────────
+CREATE TABLE IF NOT EXISTS notification_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    complaint_id UUID NOT NULL REFERENCES complaints(id),
+    channel VARCHAR(20) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    notification_type VARCHAR(30) NOT NULL,
+    complaint_status VARCHAR(30),
+    success BOOLEAN DEFAULT false,
+    error_message TEXT,
+    message_preview TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- ── INDEXES ─────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_complaints_ward ON complaints(ward_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status);
@@ -189,3 +204,5 @@ CREATE INDEX IF NOT EXISTS idx_complaints_priority ON complaints(final_priority_
 CREATE INDEX IF NOT EXISTS idx_complaints_created ON complaints(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_social_posts_sentiment ON social_posts(sentiment);
 CREATE INDEX IF NOT EXISTS idx_trust_scores_ward_date ON trust_scores(ward_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_complaint ON notification_logs(complaint_id);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_created ON notification_logs(created_at DESC);

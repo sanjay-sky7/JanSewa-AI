@@ -22,6 +22,7 @@ from app.models.audit_log import AuditLog
 from app.models.ward import Ward
 from app.models.user import User
 from app.models.notification_state import NotificationState
+from app.models.notification_log import NotificationLog
 from app.knowledge_base.ward_database import get_nearest_ward
 from app.schemas.complaint import (
     ComplaintCreate,
@@ -39,7 +40,14 @@ from app.schemas.complaint import (
     AssignmentRecommendationItem,
 )
 from app.utils.helpers import get_current_user, get_current_user_optional
-from app.services.notification_service import send_sms, send_whatsapp, send_email
+from app.services.notification_service import (
+    send_sms,
+    send_whatsapp,
+    send_email,
+    build_sms_message,
+    _build_html_email,
+    _get_status_text,
+)
 from app.knowledge_base.workforce_assignment import recommend_assignees
 
 logger = logging.getLogger(__name__)
@@ -250,6 +258,16 @@ async def _resolve_citizen_ids_by_phone(db: AsyncSession, phone: Optional[str]) 
     return [row[0] for row in citizens_result.all() if _phone_matches(row[1], phone)]
 
 
+async def _resolve_citizen_ids_by_email(db: AsyncSession, email: Optional[str]) -> list[uuid.UUID]:
+    if not email:
+        return []
+    normalized = email.strip().lower()
+    if not normalized:
+        return []
+    citizens_result = await db.execute(select(Citizen.id).where(func.lower(Citizen.email) == normalized))
+    return [row[0] for row in citizens_result.all()]
+
+
 async def _resolve_user_email_by_phone(db: AsyncSession, phone: Optional[str]) -> Optional[str]:
     if not phone:
         return None
@@ -277,6 +295,41 @@ def _build_complaint_context(complaint: Complaint) -> dict:
     }
 
 
+async def _log_notification(
+    db: AsyncSession,
+    complaint_id: uuid.UUID,
+    channel: str,
+    recipient: str,
+    notification_type: str,
+    complaint_status: Optional[str],
+    success: bool,
+    error_message: Optional[str] = None,
+    message_preview: Optional[str] = None,
+):
+    """Log a notification delivery attempt."""
+    try:
+        log = NotificationLog(
+            complaint_id=complaint_id,
+            channel=channel,
+            recipient=recipient,
+            notification_type=notification_type,
+            complaint_status=complaint_status,
+            success=success,
+            error_message=error_message,
+            message_preview=(message_preview or "")[:500],
+        )
+        db.add(log)
+    except Exception as exc:
+        logger.warning("Failed to log notification: %s", exc)
+
+
+async def _resolve_citizen_email(db: AsyncSession, citizen, phone: Optional[str]) -> Optional[str]:
+    """Resolve email: citizen.email → user.email (by phone match)."""
+    if citizen and getattr(citizen, "email", None):
+        return citizen.email
+    return await _resolve_user_email_by_phone(db, phone)
+
+
 async def _dispatch_external_notifications(
     db: AsyncSession,
     complaint: Complaint,
@@ -284,80 +337,143 @@ async def _dispatch_external_notifications(
     feedback_note: Optional[str],
     actor_name: Optional[str],
 ):
+    """Send notifications via SMS, WhatsApp, and Email on status change."""
     citizen = complaint.citizen
-    if not citizen or not citizen.phone:
+    if not citizen:
         return
 
     context = _build_complaint_context(complaint)
-    base_message = _status_notification_text(status)
     note = (feedback_note or "").strip()
-    note_part = f" Note: {note}" if note else ""
-    actor_part = f" Updated by: {actor_name}." if actor_name else ""
-    message = (
-        f"Jansewa Update: Complaint {context['complaint_short_id']} is now {status.replace('_', ' ').title()}. "
-        f"{base_message} Category: {context['category_name']}. {context['ward_label']}."
-        f"{note_part}{actor_part} Summary: {context['summary'][:140]}"
+    created_label = complaint.created_at.strftime("%d-%b-%Y %H:%M") if complaint.created_at else "NA"
+
+    # Build SMS / WhatsApp message
+    sms_message = build_sms_message(
+        notification_type="STATUS_UPDATE",
+        complaint_short_id=context["complaint_short_id"],
+        status=status,
+        category=context["category_name"],
+        ward=context["ward_label"],
+        summary=context["summary"],
+        note=note,
+        actor=actor_name or "",
     )
 
     try:
-        sms_sent = await send_sms(citizen.phone, message)
-        wa_sent = await send_whatsapp(citizen.phone, message)
-        if not sms_sent or not wa_sent:
-            logger.warning(
-                "Complaint update notification partially sent for %s (sms=%s whatsapp=%s)",
-                complaint.id,
-                sms_sent,
-                wa_sent,
+        # ── SMS ──
+        if citizen.phone:
+            sms_sent = await send_sms(citizen.phone, sms_message)
+            await _log_notification(
+                db, complaint.id, "SMS", citizen.phone, "STATUS_UPDATE",
+                status, sms_sent,
+                error_message=None if sms_sent else "Twilio SMS delivery failed or not configured",
+                message_preview=sms_message[:200],
             )
 
-        email = await _resolve_user_email_by_phone(db, citizen.phone)
+        # ── WhatsApp ──
+        if citizen.phone:
+            wa_sent = await send_whatsapp(citizen.phone, sms_message)
+            await _log_notification(
+                db, complaint.id, "WHATSAPP", citizen.phone, "STATUS_UPDATE",
+                status, wa_sent,
+                error_message=None if wa_sent else "Twilio WhatsApp delivery failed or not configured",
+                message_preview=sms_message[:200],
+            )
+
+        # ── Email ──
+        email = await _resolve_citizen_email(db, citizen, citizen.phone)
         if email:
-            subject = f"Jansewa Complaint Update - {status.replace('_', ' ')}"
-            body = f"{message}\n\nComplaint summary: {context['summary']}"
-            send_email(email, subject, body)
+            subject = f"JanSewa AI — Complaint Update: {status.replace('_', ' ').title()}"
+            plain_body = sms_message
+            html_body = _build_html_email(
+                subject=subject,
+                complaint_id=context["complaint_short_id"],
+                status=status,
+                category=context["category_name"],
+                ward=context["ward_label"],
+                summary=context["summary"],
+                registered_at=created_label,
+                status_message_en=_get_status_text(status, "en"),
+                status_message_hi=_get_status_text(status, "hi"),
+                note=note,
+                actor=actor_name or "",
+            )
+            email_sent = send_email(email, subject, plain_body, html_body)
+            await _log_notification(
+                db, complaint.id, "EMAIL", email, "STATUS_UPDATE",
+                status, email_sent,
+                error_message=None if email_sent else "SMTP email delivery failed or not configured",
+                message_preview=f"Subject: {subject}",
+            )
+
     except Exception as exc:
         logger.warning("External notification dispatch failed: %s", exc)
 
 
 async def _dispatch_registration_confirmation(db: AsyncSession, complaint: Complaint):
+    """Send registration confirmation via SMS, WhatsApp, and Email."""
     citizen = complaint.citizen
-    if not citizen or not citizen.phone:
+    if not citizen:
         return
 
     context = _build_complaint_context(complaint)
-    status = complaint.status.replace("_", " ").title()
+    status = complaint.status or "OPEN"
     created_label = complaint.created_at.strftime("%d-%b-%Y %H:%M") if complaint.created_at else "NA"
 
-    message = (
-        f"Jansewa Confirmation: Complaint {context['complaint_short_id']} registered. "
-        f"Status: {status}. Category: {context['category_name']}. {context['ward_label']}. "
-        f"Time: {created_label}. Summary: {context['summary'][:180]}"
+    # Build SMS / WhatsApp message
+    sms_message = build_sms_message(
+        notification_type="REGISTRATION",
+        complaint_short_id=context["complaint_short_id"],
+        status=status,
+        category=context["category_name"],
+        ward=context["ward_label"],
+        summary=context["summary"],
     )
 
     try:
-        sms_sent = await send_sms(citizen.phone, message)
-        wa_sent = await send_whatsapp(citizen.phone, message)
-        if not sms_sent or not wa_sent:
-            logger.warning(
-                "Registration notification partially sent for %s (sms=%s whatsapp=%s)",
-                complaint.id,
-                sms_sent,
-                wa_sent,
+        # ── SMS ──
+        if citizen.phone:
+            sms_sent = await send_sms(citizen.phone, sms_message)
+            await _log_notification(
+                db, complaint.id, "SMS", citizen.phone, "REGISTRATION",
+                status, sms_sent,
+                error_message=None if sms_sent else "Twilio SMS delivery failed or not configured",
+                message_preview=sms_message[:200],
             )
 
-        email = await _resolve_user_email_by_phone(db, citizen.phone)
-        if email:
-            subject = "Jansewa Complaint Registration Confirmation"
-            body = (
-                f"Your complaint has been registered successfully.\n\n"
-                f"Complaint ID: {complaint.id}\n"
-                f"Status: {status}\n"
-                f"Category: {context['category_name']}\n"
-                f"Ward: {context['ward_label']}\n"
-                f"Registered At: {created_label}\n"
-                f"Summary: {context['summary']}\n"
+        # ── WhatsApp ──
+        if citizen.phone:
+            wa_sent = await send_whatsapp(citizen.phone, sms_message)
+            await _log_notification(
+                db, complaint.id, "WHATSAPP", citizen.phone, "REGISTRATION",
+                status, wa_sent,
+                error_message=None if wa_sent else "Twilio WhatsApp delivery failed or not configured",
+                message_preview=sms_message[:200],
             )
-            send_email(email, subject, body)
+
+        # ── Email ──
+        email = await _resolve_citizen_email(db, citizen, citizen.phone)
+        if email:
+            subject = "JanSewa AI — Complaint Registration Confirmation"
+            plain_body = sms_message
+            html_body = _build_html_email(
+                subject=subject,
+                complaint_id=context["complaint_short_id"],
+                status=status,
+                category=context["category_name"],
+                ward=context["ward_label"],
+                summary=context["summary"],
+                registered_at=created_label,
+                status_message_en=_get_status_text(status, "en"),
+                status_message_hi=_get_status_text(status, "hi"),
+            )
+            email_sent = send_email(email, subject, plain_body, html_body)
+            await _log_notification(
+                db, complaint.id, "EMAIL", email, "REGISTRATION",
+                status, email_sent,
+                error_message=None if email_sent else "SMTP email delivery failed or not configured",
+                message_preview=f"Subject: {subject}",
+            )
+
     except Exception as exc:
         logger.warning("Registration confirmation dispatch failed: %s", exc)
 
@@ -488,21 +604,36 @@ async def create_complaint(
     citizen = None
     resolved_citizen_phone = body.citizen_phone or getattr(user, "phone", None)
     resolved_citizen_name = body.citizen_name or getattr(user, "name", None)
+    resolved_citizen_email = body.citizen_email or getattr(user, "email", None)
 
-    if resolved_citizen_phone:
-        result = await db.execute(
-            select(Citizen).where(Citizen.phone == resolved_citizen_phone)
-        )
-        citizen = result.scalar_one_or_none()
+    if resolved_citizen_phone or resolved_citizen_email:
+        if resolved_citizen_phone:
+            result = await db.execute(select(Citizen).where(Citizen.phone == resolved_citizen_phone))
+            citizen = result.scalar_one_or_none()
+        if not citizen and resolved_citizen_email:
+            result = await db.execute(
+                select(Citizen)
+                .where(func.lower(Citizen.email) == resolved_citizen_email.strip().lower())
+                .order_by(Citizen.created_at.asc())
+            )
+            citizen = result.scalars().first()
+
         if not citizen:
             citizen = Citizen(
                 name=resolved_citizen_name,
                 phone=resolved_citizen_phone,
+                email=resolved_citizen_email,
                 ward_id=resolved_ward_id,
                 is_anonymous=body.is_anonymous,
             )
             db.add(citizen)
             await db.flush()
+        else:
+            # Fill missing citizen contact details for future linkage.
+            if resolved_citizen_email and not citizen.email:
+                citizen.email = resolved_citizen_email
+            if resolved_citizen_phone and not citizen.phone:
+                citizen.phone = resolved_citizen_phone
 
     complaint = Complaint(
         citizen_id=citizen.id if citizen else None,
@@ -557,7 +688,9 @@ async def list_complaints(
     ward_id: Optional[int] = None,
     category_id: Optional[int] = None,
     priority_level: Optional[str] = None,
+    assigned_to: Optional[uuid.UUID] = None,
     citizen_phone: Optional[str] = None,
+    citizen_email: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
@@ -571,9 +704,15 @@ async def list_complaints(
         stmt = stmt.where(Complaint.category_id == category_id)
     if priority_level:
         stmt = stmt.where(Complaint.priority_level == priority_level)
-    if citizen_phone:
-        citizens_result = await db.execute(select(Citizen.id, Citizen.phone).where(Citizen.phone.isnot(None)))
-        citizen_ids = [row[0] for row in citizens_result.all() if _phone_matches(row[1], citizen_phone)]
+    if assigned_to:
+        stmt = stmt.where(Complaint.assigned_to == assigned_to)
+    if citizen_phone or citizen_email:
+        citizen_ids: list[uuid.UUID] = []
+        if citizen_phone:
+            citizen_ids.extend(await _resolve_citizen_ids_by_phone(db, citizen_phone))
+        if citizen_email:
+            citizen_ids.extend(await _resolve_citizen_ids_by_email(db, citizen_email))
+        citizen_ids = list(dict.fromkeys(citizen_ids))
         if not citizen_ids:
             return ComplaintListOut(items=[], total=0, page=page, per_page=per_page)
         stmt = stmt.where(Complaint.citizen_id.in_(citizen_ids))
@@ -843,6 +982,28 @@ async def update_status(
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
+    leadership_roles = {"LEADER", "DEPARTMENT_HEAD", "ADMIN"}
+    worker_roles = {"WORKER", "OFFICER", "ENGINEER"}
+    worker_allowed_statuses = {"UNDER_REVIEW", "IN_PROGRESS", "VERIFICATION_PENDING"}
+    final_leader_statuses = {"RESOLVED", "VERIFIED", "CLOSED"}
+
+    if user.role in worker_roles:
+        if complaint.assigned_to != user.id:
+            raise HTTPException(status_code=403, detail="Workers can update only complaints assigned to them")
+        if body.status not in worker_allowed_statuses:
+            raise HTTPException(
+                status_code=403,
+                detail="Workers can set status only to UNDER_REVIEW, IN_PROGRESS, or VERIFICATION_PENDING",
+            )
+    elif user.role in leadership_roles:
+        if body.status in final_leader_statuses and complaint.status != "VERIFICATION_PENDING":
+            raise HTTPException(
+                status_code=400,
+                detail="Final verification statuses can only be set after worker marks VERIFICATION_PENDING",
+            )
+    else:
+        raise HTTPException(status_code=403, detail="Not allowed to update complaint status")
+
     old_status = complaint.status
     complaint.status = body.status
     complaint.updated_at = datetime.utcnow()
@@ -881,6 +1042,8 @@ async def my_notifications(
     user=Depends(get_current_user),
 ):
     citizen_ids = await _resolve_citizen_ids_by_phone(db, getattr(user, "phone", None))
+    citizen_ids += await _resolve_citizen_ids_by_email(db, getattr(user, "email", None))
+    citizen_ids = list(dict.fromkeys(citizen_ids))
     if not citizen_ids:
         return ComplaintNotificationListOut(items=[], total=0, unread_count=0)
 

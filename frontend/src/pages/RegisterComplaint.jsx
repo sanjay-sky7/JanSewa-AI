@@ -66,6 +66,7 @@ export default function RegisterComplaint() {
   const [imageFile, setImageFile] = useState(null);
   const [countryCode, setCountryCode] = useState('+91');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [citizenEmail, setCitizenEmail] = useState('');
   const [geoTag, setGeoTag] = useState(null);
   const [geoNote, setGeoNote] = useState('');
   const [latestComplaints, setLatestComplaints] = useState([]);
@@ -103,7 +104,10 @@ export default function RegisterComplaint() {
         setPhoneNumber(user.phone);
       }
     }
-  }, [user?.phone]);
+    if (user?.email) {
+      setCitizenEmail(user.email);
+    }
+  }, [user?.phone, user?.email]);
 
   useEffect(() => {
     async function loadCategories() {
@@ -283,6 +287,7 @@ export default function RegisterComplaint() {
         raw_text: rawText.trim() || null,
         citizen_name: user?.name || 'Citizen',
         citizen_phone: fullPhone || null,
+        citizen_email: citizenEmail.trim() || null,
         is_anonymous: false,
       };
 
@@ -311,7 +316,22 @@ export default function RegisterComplaint() {
       setImageFile(null);
       await loadLatestStatus(fullPhone);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Could not submit complaint. Please try again.');
+      if (!err?.response) {
+        const apiBase = import.meta.env.VITE_API_URL || 'the configured API base';
+        setError(`Unable to reach the backend at ${apiBase}. Please ensure the API server is running.`);
+      } else if (Array.isArray(err.response?.data?.detail)) {
+        const messages = err.response.data.detail
+          .map((item) => item?.msg)
+          .filter(Boolean)
+          .join(' ');
+        setError(messages || 'Could not submit complaint. Please try again.');
+      } else {
+        setError(
+          err.response?.data?.detail
+            || err.response?.data?.message
+            || 'Could not submit complaint. Please try again.'
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -374,7 +394,32 @@ export default function RegisterComplaint() {
         )}
         {success && (
           <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {success}
+            <p className="font-semibold">{success}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {fullPhone && (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                    📱 SMS → {fullPhone}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">
+                    💬 WhatsApp → {fullPhone}
+                  </span>
+                </>
+              )}
+              {citizenEmail.trim() && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-800">
+                  📧 Email → {citizenEmail.trim()}
+                </span>
+              )}
+              {!fullPhone && !citizenEmail.trim() && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                  ⚠️ No phone/email provided — notifications not sent
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-emerald-600">
+              You will receive acknowledgement & status updates via the channels shown above.
+            </p>
           </div>
         )}
         {transcribedPreview && (
@@ -445,6 +490,26 @@ export default function RegisterComplaint() {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Email field for notifications */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              {t('register_email', 'Email (for acknowledgement & status updates)')}
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center text-gray-400">📧</span>
+              <input
+                type="email"
+                value={citizenEmail}
+                onChange={(e) => setCitizenEmail(e.target.value)}
+                placeholder="your.email@gmail.com"
+                className="register-field w-full rounded-lg border border-blue-200 bg-white pl-9 pr-3 py-2.5 text-sm transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              {t('register_email_hint', 'Receive complaint acknowledgement & status updates on your email. SMS and WhatsApp will be sent to the phone number above.')}
+            </p>
           </div>
 
           {(inputType === 'text' || inputType === 'voice' || inputType === 'image') && (

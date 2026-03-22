@@ -200,8 +200,22 @@ def seed():
             ("Sadak itni kharab hai ki ambulance bhi nahi aa sakti.", "hindi", "Road/Pothole", 88),
         ]
 
-        statuses = ["OPEN", "OPEN", "OPEN", "ASSIGNED", "IN_PROGRESS",
-                     "VERIFICATION_PENDING", "VERIFIED", "CLOSED"]
+        statuses = [
+            "OPEN",
+            "UNDER_REVIEW",
+            "ASSIGNED",
+            "IN_PROGRESS",
+            "VERIFICATION_PENDING",
+            "RESOLVED",
+            "VERIFIED",
+            "CLOSED",
+        ]
+        guaranteed_statuses = (
+            ["ASSIGNED"] * 4
+            + ["UNDER_REVIEW"] * 4
+            + ["IN_PROGRESS"] * 4
+            + ["VERIFICATION_PENDING"] * 4
+        )
         priorities = ["CRITICAL", "HIGH", "HIGH", "MEDIUM", "MEDIUM", "LOW"]
 
         existing = db.query(Complaint).count()
@@ -217,7 +231,10 @@ def seed():
             for i, (text, lang, cat_name, score) in enumerate(complaint_texts):
                 citizen = random.choice(citizens)
                 ward_id = random.choice(ward_ids) if ward_ids else None
-                status = random.choice(statuses)
+                if i < len(guaranteed_statuses):
+                    status = guaranteed_statuses[i]
+                else:
+                    status = random.choice(statuses)
                 created = datetime.utcnow() - timedelta(
                     days=random.randint(0, 30),
                     hours=random.randint(0, 23),
@@ -254,7 +271,7 @@ def seed():
                     assigned_at=created + timedelta(hours=1) if assignee_id else None,
                     resolved_at=(
                         created + timedelta(days=random.randint(1, 5))
-                        if status in ("VERIFIED", "CLOSED") else None
+                        if status in ("RESOLVED", "VERIFIED", "CLOSED") else None
                     ),
                     verified_at=(
                         created + timedelta(days=random.randint(1, 5))
@@ -267,6 +284,88 @@ def seed():
 
             db.flush()
             print(f"  ✅ Seeded {len(complaint_texts)} complaints")
+
+        # Ensure at least 4 complaints for statuses shown in worker filter:
+        # Assigned, Under Review, Working On It, and Completed.
+        # In this app: Working On It -> IN_PROGRESS, Completed -> VERIFICATION_PENDING.
+        target_statuses = ["ASSIGNED", "UNDER_REVIEW", "IN_PROGRESS", "VERIFICATION_PENDING"]
+        status_counts = {status: 0 for status in target_statuses}
+        for row in db.query(Complaint.status).filter(Complaint.status.in_(target_statuses)).all():
+            status_counts[row[0]] = status_counts.get(row[0], 0) + 1
+
+        missing_counts = {
+            status: max(0, 4 - status_counts.get(status, 0))
+            for status in target_statuses
+        }
+        missing_total = sum(missing_counts.values())
+
+        if missing_total > 0:
+            citizens = db.query(Citizen).all()
+            users = db.query(User).filter(User.role == "WORKER").all()
+            wards = db.query(Ward).all()
+            categories = db.query(Category).all()
+            if citizens and wards and categories:
+                ward_ids = [w.id for w in wards]
+                cat_map = {c.name: c.id for c in categories}
+                other_category_id = cat_map.get("Other")
+
+                template_index = 0
+                for status in target_statuses:
+                    for _ in range(missing_counts[status]):
+                        text, lang, cat_name, score = complaint_texts[template_index % len(complaint_texts)]
+                        template_index += 1
+
+                        citizen = random.choice(citizens)
+                        ward_id = random.choice(ward_ids)
+                        created = datetime.utcnow() - timedelta(
+                            days=random.randint(0, 10),
+                            hours=random.randint(0, 23),
+                        )
+                        priority_level = (
+                            "CRITICAL" if score >= 80 else
+                            "HIGH" if score >= 60 else
+                            "MEDIUM" if score >= 40 else "LOW"
+                        )
+                        assignee_id = random.choice(users).id if users and status != "OPEN" else None
+
+                        db.add(Complaint(
+                            citizen_id=citizen.id,
+                            category_id=cat_map.get(cat_name, other_category_id),
+                            ward_id=ward_id,
+                            raw_text=text,
+                            input_type=random.choice(["text", "text", "text", "voice", "image"]),
+                            source_language=lang,
+                            ai_summary=text[:120],
+                            ai_location=f"Ward {ward_id} area",
+                            ai_duration_days=random.choice([1, 2, 3, 5, 7, 14, 30, None]),
+                            ai_category_confidence=round(random.uniform(0.75, 0.98), 2),
+                            urgency_score=min(100, score + random.randint(-5, 5)),
+                            impact_score=random.randint(20, 95),
+                            recurrence_score=random.randint(0, 60),
+                            sentiment_score=random.randint(30, 90),
+                            vulnerability_score=random.choice([30, 30, 30, 90]),
+                            final_priority_score=score,
+                            priority_level=priority_level,
+                            status=status,
+                            assigned_to=assignee_id,
+                            assigned_at=created + timedelta(hours=1) if assignee_id else None,
+                            resolved_at=(
+                                created + timedelta(days=random.randint(1, 5))
+                                if status in ("RESOLVED", "VERIFIED", "CLOSED") else None
+                            ),
+                            verified_at=(
+                                created + timedelta(days=random.randint(1, 5))
+                                if status == "VERIFIED" else None
+                            ),
+                            created_at=created,
+                            updated_at=created,
+                        ))
+
+                db.flush()
+                print(
+                    "  ✅ Added missing complaints for filter statuses: "
+                    + ", ".join(f"{k}={v}" for k, v in missing_counts.items() if v > 0)
+                )
 
         # ── 6. VERIFICATIONS (10) ───────────────────────
         existing = db.query(Verification).count()

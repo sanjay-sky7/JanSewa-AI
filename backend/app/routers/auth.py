@@ -1,7 +1,7 @@
 """Auth router — login, register, me."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -54,7 +54,8 @@ class AuthMessageOut(BaseModel):
 
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
+    normalized_email = (body.email or "").strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == normalized_email))
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash:
@@ -71,8 +72,10 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/register", response_model=UserOut, status_code=201)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    normalized_email = (body.email or "").strip().lower()
+
     # Check unique email
-    existing = await db.execute(select(User).where(User.email == body.email))
+    existing = await db.execute(select(User).where(func.lower(User.email) == normalized_email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -86,7 +89,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     user = User(
         name=body.name,
-        email=body.email,
+        email=normalized_email,
         password_hash=hash_password(body.password),
         role=body.role,
         department=body.department,
@@ -101,7 +104,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/forgot-password", response_model=AuthMessageOut)
 async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == str(body.email)))
+    normalized_email = str(body.email or "").strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == normalized_email))
     user = result.scalar_one_or_none()
 
     if user:
@@ -132,3 +136,17 @@ async def update_me(body: ProfileUpdateRequest, db: AsyncSession = Depends(get_d
         user.ward_id = ward.id if ward else None
 
     return await _to_user_out(user, db)
+
+
+@router.get("/workers", response_model=list[UserOut])
+async def list_workers(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role not in ("LEADER", "DEPARTMENT_HEAD", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Only leadership roles can view workers")
+
+    result = await db.execute(
+        select(User)
+        .where(User.role.in_(["WORKER", "OFFICER", "ENGINEER"]))
+        .order_by(User.name.asc())
+    )
+    workers = result.scalars().all()
+    return [await _to_user_out(worker, db) for worker in workers]

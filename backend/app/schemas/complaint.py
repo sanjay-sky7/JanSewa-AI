@@ -19,6 +19,7 @@ class ComplaintCreate(BaseModel):
     source_language: Optional[str] = None
     citizen_name: Optional[str] = None
     citizen_phone: Optional[str] = None
+    citizen_email: Optional[str] = None
     ward_id: Optional[int] = None
     category_id: Optional[int] = None
     is_anonymous: bool = False

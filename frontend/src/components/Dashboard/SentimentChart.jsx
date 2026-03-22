@@ -21,26 +21,35 @@ export default function SentimentChart({ data = [] }) {
       {
         label: t('sentiment_positive', 'Positive'),
         data: data.map((d) => d.positive),
-        borderColor: '#22c55e',
-        backgroundColor: 'rgba(34,197,94,0.1)',
+        borderColor: '#16a34a',
+        backgroundColor: 'rgba(22,163,74,0.12)',
         fill: true,
-        tension: 0.4,
+        tension: 0.35,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 3,
       },
       {
         label: t('sentiment_negative', 'Negative'),
         data: data.map((d) => d.negative),
         borderColor: '#ef4444',
-        backgroundColor: 'rgba(239,68,68,0.1)',
+        backgroundColor: 'rgba(239,68,68,0.12)',
         fill: true,
-        tension: 0.4,
+        tension: 0.35,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 3,
       },
       {
         label: t('sentiment_neutral', 'Neutral'),
         data: data.map((d) => d.neutral),
-        borderColor: '#6b7280',
-        backgroundColor: 'rgba(107,114,128,0.1)',
+        borderColor: '#64748b',
+        backgroundColor: 'rgba(100,116,139,0.12)',
         fill: true,
-        tension: 0.4,
+        tension: 0.35,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 3,
       },
     ],
   };
@@ -49,22 +58,53 @@ export default function SentimentChart({ data = [] }) {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+      legend: {
+        position: 'bottom',
+        labels: {
+          usePointStyle: true,
+          boxWidth: 8,
+          color: '#475569',
+          font: { family: 'Manrope', size: 11, weight: '600' },
+        },
+      },
+      tooltip: {
+        backgroundColor: '#0f172a',
+        titleColor: '#f8fafc',
+        bodyColor: '#e2e8f0',
+        borderWidth: 1,
+        borderColor: 'rgba(148, 163, 184, 0.3)',
+      },
     },
     scales: {
-      y: { beginAtZero: true, grid: { color: '#f3f4f6' } },
-      x: { grid: { display: false } },
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(148, 163, 184, 0.2)' },
+        ticks: { color: '#64748b', font: { family: 'Manrope', size: 10 } },
+      },
+      x: {
+        grid: { display: false },
+        ticks: { color: '#64748b', font: { family: 'Manrope', size: 10 } },
+      },
     },
   };
 
   return (
-    <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">{t('sentiment_title', 'Sentiment Trend')}</h3>
-        <p className="text-xs text-gray-500 mt-0.5">{t('sentiment_subtitle', 'Public sentiment over time from social media')}</p>
+    <div className="premium-panel">
+      <div className="panel-header">
+        <div>
+          <p className="panel-kicker">{t('sentiment_kicker', 'Citizen Pulse')}</p>
+          <h3 className="panel-title">{t('sentiment_title', 'Sentiment Trend')}</h3>
+          <p className="panel-subtitle">{t('sentiment_subtitle', 'Public sentiment over time from social media')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="glass-pill">{t('sentiment_window', 'Window')}: 30 {t('sentiment_days', 'days')}</span>
+          <span className="glass-pill">{t('sentiment_signals', 'Signals')}: {data.length}</span>
+        </div>
       </div>
-      <div className="p-4 h-[320px]">
-        <Line data={chartData} options={options} />
+      <div className="panel-body">
+        <div className="chart-shell h-[340px]">
+          <Line data={chartData} options={options} />
+        </div>
       </div>
     </div>
   );

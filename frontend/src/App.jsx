@@ -17,8 +17,10 @@ import ManageComplaints from './pages/ManageComplaints';
 import MyProfile from './pages/MyProfile';
 import MyComplaints from './pages/MyComplaints';
 import CitizenDashboard from './pages/CitizenDashboard';
+import WorkerDashboard from './pages/WorkerDashboard';
 import HelpCenter from './pages/HelpCenter';
 import AboutDeveloper from './pages/AboutDeveloper';
+import WorkerManageComplaints from './pages/WorkerManageComplaints';
 
 // Layout
 import Navbar from './components/Common/Navbar';
@@ -67,6 +69,7 @@ function HomeRedirect() {
 function DashboardEntry() {
   const { user } = useAuth();
   if (user?.role === 'CITIZEN') return <CitizenDashboard />;
+  if (user?.role === 'WORKER') return <WorkerDashboard />;
   return <LeaderDashboard />;
 }
 
@@ -104,8 +107,16 @@ export default function App() {
           <Route
             path="/manage-complaints"
             element={(
-              <RoleRoute roles={['LEADER', 'DEPARTMENT_HEAD', 'WORKER', 'OFFICER', 'ENGINEER', 'ADMIN']}>
+              <RoleRoute roles={['LEADER', 'DEPARTMENT_HEAD', 'OFFICER', 'ENGINEER', 'ADMIN']}>
                 <ManageComplaints />
+              </RoleRoute>
+            )}
+          />
+          <Route
+            path="/worker-manage-complaints"
+            element={(
+              <RoleRoute roles={['WORKER']}>
+                <WorkerManageComplaints />
               </RoleRoute>
             )}
           />

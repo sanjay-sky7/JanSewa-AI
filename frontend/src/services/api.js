@@ -3,7 +3,15 @@
  */
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL ||"";
+const configuredApiBase = (import.meta.env.VITE_API_URL || '').trim();
+const isLocalPage =
+  typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+const pointsToLocalBackend = /localhost|127\.0\.0\.1/i.test(configuredApiBase);
+
+// For local pages, prefer same-origin /api proxy unless an explicit non-local backend is configured.
+const API_BASE = isLocalPage && pointsToLocalBackend ? '' : configuredApiBase;
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
@@ -42,6 +50,7 @@ export const authAPI = {
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
   me: () => api.get('/auth/me'),
   updateMe: (data) => api.put('/auth/me', data),
+  workers: () => api.get('/auth/workers'),
 };
 
 // ── Complaints ──────────────────────────────────────────

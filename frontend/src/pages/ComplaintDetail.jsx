@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { complaintsAPI, verificationAPI } from '../services/api';
+import { authAPI, complaintsAPI, verificationAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
@@ -38,13 +38,18 @@ export default function ComplaintDetail() {
   const { hasRole } = useAuth();
   const { t } = useLanguage();
   const [complaint, setComplaint] = useState(null);
+  const [workers, setWorkers] = useState([]);
+  const [assignTo, setAssignTo] = useState('');
   const [verification, setVerification] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
   const [statusNote, setStatusNote] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [statusError, setStatusError] = useState('');
   const [statusSuccess, setStatusSuccess] = useState('');
+  const [assignError, setAssignError] = useState('');
+  const [assignSuccess, setAssignSuccess] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -64,6 +69,21 @@ export default function ComplaintDetail() {
     load();
   }, [id]);
 
+  useEffect(() => {
+    if (!hasRole('LEADER', 'DEPARTMENT_HEAD', 'ADMIN')) return;
+
+    async function loadWorkers() {
+      try {
+        const { data } = await authAPI.workers();
+        setWorkers(data || []);
+      } catch {
+        setWorkers([]);
+      }
+    }
+
+    loadWorkers();
+  }, [hasRole]);
+
   const handleStatusUpdate = async () => {
     if (!newStatus) return;
     setStatusError('');
@@ -80,6 +100,24 @@ export default function ComplaintDetail() {
       setStatusError(err.response?.data?.detail || t('complaint_status_update_failed', 'Status update failed.'));
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!assignTo) return;
+    setAssignError('');
+    setAssignSuccess('');
+    setAssignLoading(true);
+    try {
+      await complaintsAPI.assign(id, { assigned_to: assignTo });
+      const { data } = await complaintsAPI.get(id);
+      setComplaint(data);
+      setAssignSuccess('Complaint assigned successfully.');
+      setAssignTo('');
+    } catch (err) {
+      setAssignError(err.response?.data?.detail || 'Assignment failed.');
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -200,6 +238,39 @@ export default function ComplaintDetail() {
       {/* Status Update (leaders/dept heads only) */}
       {hasRole('LEADER', 'DEPARTMENT_HEAD', 'ADMIN') && (
         <div className="card p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Assign Work</h2>
+          {assignError && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {assignError}
+            </div>
+          )}
+          {assignSuccess && (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {assignSuccess}
+            </div>
+          )}
+          <div className="mb-6 flex flex-wrap gap-3">
+            <select
+              value={assignTo}
+              onChange={(e) => setAssignTo(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[260px]"
+            >
+              <option value="">Select worker...</option>
+              {workers.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name} ({worker.role})
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleAssign}
+              disabled={!assignTo || assignLoading}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {assignLoading ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+
           <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('complaint_update_status', 'Update Status')}</h2>
           {statusError && (
             <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

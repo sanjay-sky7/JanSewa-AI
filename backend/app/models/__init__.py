@@ -11,6 +11,7 @@ from app.models.communication import Communication  # noqa: F401
 from app.models.trust_score import TrustScore  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.notification_state import NotificationState  # noqa: F401
+from app.models.notification_log import NotificationLog  # noqa: F401
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "TrustScore",
     "AuditLog",
     "NotificationState",
+    "NotificationLog",
 ]

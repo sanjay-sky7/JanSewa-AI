@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { complaintsAPI } from '../services/api';
+import { authAPI, complaintsAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_OPTIONS = [
   'OPEN',
@@ -15,12 +16,18 @@ const STATUS_OPTIONS = [
 ];
 
 export default function ManageComplaints() {
+  const { hasRole } = useAuth();
   const { t } = useLanguage();
   const [complaints, setComplaints] = useState([]);
+  const [workers, setWorkers] = useState([]);
+  const [assignmentDrafts, setAssignmentDrafts] = useState({});
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState(null);
+  const [assigningId, setAssigningId] = useState(null);
+
+  const canAssign = hasRole('LEADER', 'DEPARTMENT_HEAD', 'ADMIN');
 
   async function loadComplaints() {
     setLoading(true);
@@ -42,6 +49,21 @@ export default function ManageComplaints() {
     loadComplaints();
   }, [statusFilter]);
 
+  useEffect(() => {
+    if (!canAssign) return;
+
+    async function loadWorkers() {
+      try {
+        const { data } = await authAPI.workers();
+        setWorkers(data || []);
+      } catch (err) {
+        setError(err.response?.data?.detail || 'Failed to load workers list.');
+      }
+    }
+
+    loadWorkers();
+  }, [canAssign]);
+
   async function updateStatus(complaintId, nextStatus) {
     setSavingId(complaintId);
     setError('');
@@ -54,6 +76,33 @@ export default function ManageComplaints() {
       setError(err.response?.data?.detail || t('manage_status_update_failed', 'Status update failed.'));
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function assignToWorker(complaint) {
+    const selectedWorkerId = assignmentDrafts[complaint.id];
+    if (!selectedWorkerId) return;
+
+    setAssigningId(complaint.id);
+    setError('');
+    try {
+      await complaintsAPI.assign(complaint.id, { assigned_to: selectedWorkerId });
+      const worker = workers.find((w) => String(w.id) === String(selectedWorkerId));
+      setComplaints((prev) =>
+        prev.map((c) =>
+          c.id === complaint.id
+            ? {
+                ...c,
+                status: 'ASSIGNED',
+                assignee: worker || c.assignee,
+              }
+            : c
+        )
+      );
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Assignment failed.');
+    } finally {
+      setAssigningId(null);
     }
   }
 
@@ -107,17 +156,19 @@ export default function ManageComplaints() {
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">{t('manage_col_input', 'Input')}</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">{t('manage_col_priority', 'Priority')}</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">{t('manage_col_current_status', 'Current Status')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Assigned Worker</th>
+                {canAssign && <th className="px-4 py-3 text-left font-semibold text-slate-700">Assign Work</th>}
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">{t('manage_col_change_status', 'Change Status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-gray-400" colSpan={6}>{t('manage_loading', 'Loading complaints...')}</td>
+                  <td className="px-4 py-10 text-center text-gray-400" colSpan={canAssign ? 8 : 7}>{t('manage_loading', 'Loading complaints...')}</td>
                 </tr>
               ) : complaints.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-gray-400" colSpan={6}>{t('manage_no_complaints', 'No complaints found.')}</td>
+                  <td className="px-4 py-10 text-center text-gray-400" colSpan={canAssign ? 8 : 7}>{t('manage_no_complaints', 'No complaints found.')}</td>
                 </tr>
               ) : (
                 complaints.map((c) => (
@@ -134,6 +185,41 @@ export default function ManageComplaints() {
                     <td className="px-4 py-3 uppercase text-gray-700">{c.input_type}</td>
                     <td className="px-4 py-3 text-gray-700">{c.priority_level || t('common_na', 'N/A')}</td>
                     <td className="px-4 py-3 font-semibold text-gray-800">{statusLabel(c.status)}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {c.assignee?.name ? `${c.assignee.name} (${c.assignee.role})` : '—'}
+                    </td>
+                    {canAssign && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={assignmentDrafts[c.id] || ''}
+                            onChange={(e) =>
+                              setAssignmentDrafts((prev) => ({
+                                ...prev,
+                                [c.id]: e.target.value,
+                              }))
+                            }
+                            className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                            disabled={assigningId === c.id}
+                          >
+                            <option value="">Select worker...</option>
+                            {workers.map((worker) => (
+                              <option key={worker.id} value={worker.id}>
+                                {worker.name} ({worker.role})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!assignmentDrafts[c.id] || assigningId === c.id}
+                            onClick={() => assignToWorker(c)}
+                            className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                          >
+                            {assigningId === c.id ? 'Assigning...' : 'Assign'}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <select
                         value={c.status}

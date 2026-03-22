@@ -13,6 +13,7 @@ class Citizen(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=True)
     phone: Mapped[str] = mapped_column(String(15), unique=True, nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=True)
     ward_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("wards.id"), nullable=True
     )

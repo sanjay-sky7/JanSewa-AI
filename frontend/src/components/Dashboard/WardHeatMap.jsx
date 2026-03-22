@@ -21,6 +21,9 @@ export default function WardHeatMap({ data = [] }) {
   const { t } = useLanguage();
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
+  const totalComplaints = data.reduce((sum, ward) => sum + (ward.total_complaints || 0), 0);
+  const criticalComplaints = data.reduce((sum, ward) => sum + (ward.critical_complaints || 0), 0);
+  const activeWards = data.filter((ward) => (ward.total_complaints || 0) > 0).length;
 
   useEffect(() => {
     if (mapInstance.current) return;
@@ -88,17 +91,33 @@ export default function WardHeatMap({ data = [] }) {
   }, [data]);
 
   return (
-    <div className="card overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">{t('heatmap_title', 'Ward Heat Map')}</h3>
-        <p className="text-xs text-gray-500 mt-0.5">{t('heatmap_subtitle', 'Complaint density by geographic area')}</p>
+    <div className="premium-panel">
+      <div className="panel-header">
+        <div>
+          <p className="panel-kicker">{t('heatmap_kicker', 'Spatial Intelligence')}</p>
+          <h3 className="panel-title">{t('heatmap_title', 'Ward Heat Map')}</h3>
+          <p className="panel-subtitle">{t('heatmap_subtitle', 'Complaint density by geographic area')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="glass-pill">{t('heatmap_total', 'Total')}: {totalComplaints}</span>
+          <span className="glass-pill">{t('heatmap_critical', 'Critical')}: {criticalComplaints}</span>
+          <span className="glass-pill">{t('heatmap_active', 'Active Wards')}: {activeWards}</span>
+        </div>
       </div>
-      <div ref={mapRef} className="h-[400px] w-full" />
-      {/* Legend */}
-      <div className="px-5 py-3 border-t border-gray-100 flex gap-4 text-xs">
+      <div className="panel-body">
+        <div className="map-shell">
+          <div ref={mapRef} className="h-[420px] w-full" />
+          <div className="map-overlay" />
+          <div className="map-metrics">
+            <div className="map-metric">{t('heatmap_density', 'Density')}: {activeWards}</div>
+            <div className="map-metric">{t('heatmap_total', 'Total')}: {totalComplaints}</div>
+          </div>
+        </div>
+      </div>
+      <div className="legend-row">
         {Object.entries(severityColor).map(([label, color]) => (
-          <span key={label} className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+          <span key={label} className="legend-chip">
+            <span className="legend-dot" style={{ backgroundColor: color }} />
             {label}
           </span>
         ))}

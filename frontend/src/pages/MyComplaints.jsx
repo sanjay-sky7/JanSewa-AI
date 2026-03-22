@@ -34,9 +34,20 @@ function statusTone(status) {
   return map[status] || map.OPEN;
 }
 
+function SummaryCard({ title, value, tone }) {
+  return (
+    <div className={`my-summary-card relative overflow-hidden rounded-2xl border border-white bg-gradient-to-br ${tone} p-4 shadow-sm ring-1 ring-slate-200`}>
+      <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-white/30 blur-xl" />
+      <p className="my-summary-title text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="my-summary-value mt-2 text-3xl font-black leading-none text-slate-900">{value}</p>
+    </div>
+  );
+}
+
 export default function MyComplaints() {
   const { user } = useAuth();
   const { t } = useLanguage();
+
   const [items, setItems] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
@@ -58,6 +69,7 @@ export default function MyComplaints() {
     const open = items.filter((i) => ['OPEN', 'UNDER_REVIEW', 'ASSIGNED'].includes(i.status)).length;
     const inProgress = items.filter((i) => ['IN_PROGRESS', 'VERIFICATION_PENDING'].includes(i.status)).length;
     const resolved = items.filter((i) => ['RESOLVED', 'VERIFIED', 'CLOSED'].includes(i.status)).length;
+
     return {
       total: items.length,
       open,
@@ -66,31 +78,46 @@ export default function MyComplaints() {
     };
   }, [items]);
 
+  const latestFeedbackByComplaint = useMemo(() => {
+    const map = {};
+    for (const note of notifications) {
+      if (!map[note.complaint_id]) map[note.complaint_id] = note;
+    }
+    return map;
+  }, [notifications]);
+
+  const statusLabel = (status) => t(`status_${status.toLowerCase()}`, status.replaceAll('_', ' '));
+
   useEffect(() => {
     loadComplaints();
-  }, [user?.phone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.phone, user?.email]);
 
   useEffect(() => {
     loadNotifications();
     const timer = setInterval(loadNotifications, 30000);
     return () => clearInterval(timer);
-  }, [user?.phone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.phone, user?.email]);
 
   async function loadComplaints() {
-    if (!user?.phone) {
+    setError('');
+
+    if (!user?.phone && !user?.email) {
       setItems([]);
       return;
     }
 
     setLoading(true);
-    setError('');
-
     try {
-      const { data } = await complaintsAPI.list({
+      const params = {
         page: 1,
         per_page: 100,
-        citizen_phone: user.phone,
-      });
+      };
+      if (user?.phone) params.citizen_phone = user.phone;
+      if (user?.email) params.citizen_email = user.email;
+
+      const { data } = await complaintsAPI.list(params);
       setItems(data.items || []);
     } catch (err) {
       setError(err.response?.data?.detail || t('manage_failed_load', 'Failed to load complaints.'));
@@ -101,7 +128,7 @@ export default function MyComplaints() {
   }
 
   async function loadNotifications() {
-    if (!user?.phone) {
+    if (!user?.phone && !user?.email) {
       setNotifications([]);
       return;
     }
@@ -117,16 +144,6 @@ export default function MyComplaints() {
     }
   }
 
-  const latestFeedbackByComplaint = useMemo(() => {
-    const map = {};
-    for (const note of notifications) {
-      if (!map[note.complaint_id]) map[note.complaint_id] = note;
-    }
-    return map;
-  }, [notifications]);
-
-  const statusLabel = (status) => t(`status_${status.toLowerCase()}`, status.replaceAll('_', ' '));
-
   return (
     <div className="my-page mx-auto max-w-6xl space-y-6">
       <header className="my-hero relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-r from-[#0f172a] via-[#0a2a63] to-[#0ea5e9] p-6 shadow-xl">
@@ -136,7 +153,7 @@ export default function MyComplaints() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-100">Citizen Desk</p>
           <h1 className="text-3xl font-black text-white">{t('my_title', 'My Complaints')}</h1>
           <p className="mt-2 text-sm text-slate-100/95">
-          {t('my_subtitle', 'Track complete complaint history and the latest progress timeline.')}
+            {t('my_subtitle', 'Track complete complaint history and the latest progress timeline.')}
           </p>
         </div>
       </header>
@@ -148,9 +165,9 @@ export default function MyComplaints() {
         <SummaryCard title={t('my_resolved', 'Resolved')} value={summary.resolved} tone="from-emerald-100 to-emerald-50" />
       </section>
 
-      {!user?.phone && (
+      {!user?.phone && !user?.email && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {t('my_add_mobile_hint', 'Add your mobile number in My Profile to view complaint history.')}
+          {t('my_add_mobile_hint', 'Add your mobile number or email in My Profile to view complaint history.')}
         </div>
       )}
 
@@ -209,6 +226,7 @@ export default function MyComplaints() {
             {notifications.filter((n) => n.is_recent).length} {t('my_recent', 'recent')}
           </span>
         </div>
+
         <div className="mt-3 space-y-2">
           {loadingNotifications ? (
             <p className="text-sm text-gray-500">{t('my_loading_notifications', 'Loading notifications...')}</p>
@@ -276,7 +294,7 @@ export default function MyComplaints() {
                     )}
                   </div>
 
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t('my_progress_timeline', 'Progress Timeline')}</p>
+                  <p className="mb-2 mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{t('my_progress_timeline', 'Progress Timeline')}</p>
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-8">
                     {STATUS_FLOW.map((status, idx) => (
                       <div
@@ -297,16 +315,6 @@ export default function MyComplaints() {
           })
         )}
       </section>
-    </div>
-  );
-}
-
-function SummaryCard({ title, value, tone }) {
-  return (
-    <div className={`my-summary-card relative overflow-hidden rounded-2xl border border-white bg-gradient-to-br ${tone} p-4 shadow-sm ring-1 ring-slate-200`}>
-      <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-white/30 blur-xl" />
-      <p className="my-summary-title text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="my-summary-value mt-2 text-3xl font-black leading-none text-slate-900">{value}</p>
     </div>
   );
 }

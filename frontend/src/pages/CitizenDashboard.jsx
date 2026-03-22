@@ -35,7 +35,7 @@ export default function CitizenDashboard() {
     let timer;
 
     async function load() {
-      if (!user?.phone) {
+      if (!user?.phone && !user?.email) {
         setItems([]);
         setNotifications([]);
         setLoading(false);
@@ -46,8 +46,12 @@ export default function CitizenDashboard() {
       setError('');
 
       try {
+        const complaintParams = { page: 1, per_page: 200 };
+        if (user?.phone) complaintParams.citizen_phone = user.phone;
+        if (user?.email) complaintParams.citizen_email = user.email;
+
         const [complaintsRes, notificationsRes] = await Promise.allSettled([
-          complaintsAPI.list({ page: 1, per_page: 200, citizen_phone: user.phone }),
+          complaintsAPI.list(complaintParams),
           complaintsAPI.myNotifications({ limit: 20 }),
         ]);
 
@@ -69,7 +73,7 @@ export default function CitizenDashboard() {
     load();
     timer = setInterval(load, 15000);
     return () => clearInterval(timer);
-  }, [user?.phone, t]);
+  }, [user?.phone, user?.email, t]);
 
   const statusLabel = (status) => t(`status_${status.toLowerCase()}`, status.replaceAll('_', ' '));
 

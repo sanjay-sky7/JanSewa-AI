@@ -81,6 +81,12 @@ export default function Login() {
         navigate(profile.role === 'CITIZEN' ? '/register-complaint' : '/dashboard');
       }
     } catch (err) {
+      if (!err?.response) {
+        const target = err?.config?.baseURL || '/api';
+        setError(`Unable to reach backend at ${target}. Please start backend server and try again.`);
+        return;
+      }
+
       const fallback =
         mode === 'register'
           ? t('login_err_registration_failed', 'Registration failed. Please try again.')
@@ -114,9 +120,10 @@ export default function Login() {
 
   return (
     <div className="auth-bg relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-8">
-      <div className="pointer-events-none absolute -left-20 top-14 h-80 w-80 rounded-full bg-[#ff9933]/12 blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-24 h-96 w-96 rounded-full bg-[#138808]/12 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-10 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-[#0a2a63]/12 blur-3xl" />
+      <div className="auth-orb auth-orb-amber -left-28 top-8 h-72 w-72" />
+      <div className="auth-orb auth-orb-sky right-0 top-12 h-96 w-96" />
+      <div className="auth-orb auth-orb-green bottom-6 left-1/2 h-80 w-80 -translate-x-1/2" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(255,255,255,0.55),transparent_40%),radial-gradient(circle_at_15%_75%,rgba(255,255,255,0.35),transparent_45%)]" />
 
       {showWelcomeOverlay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-sm px-4">
@@ -141,12 +148,13 @@ export default function Login() {
         </div>
       )}
 
-      <div className="mx-auto grid max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/90 shadow-2xl backdrop-blur lg:grid-cols-2">
-        <section className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(255,153,51,0.34),transparent_38%),radial-gradient(circle_at_88%_16%,rgba(56,189,248,0.25),transparent_32%),linear-gradient(145deg,#0f172a_2%,#0a2a63_45%,#0d9488_72%,#138808_100%)] p-10 text-slate-100 lg:block">
+      <div className="auth-shell mx-auto grid max-w-7xl grid-cols-1 overflow-hidden bg-white/85 backdrop-blur lg:grid-cols-2">
+        <section className="auth-hero relative hidden overflow-hidden p-10 text-slate-100 lg:block">
           <div className="absolute -left-24 top-14 h-72 w-72 rounded-full bg-[#ff9933]/25 blur-3xl" />
           <div className="absolute right-0 top-10 h-48 w-48 rounded-full bg-white/15 blur-2xl" />
           <div className="absolute -right-16 bottom-8 h-72 w-72 rounded-full bg-[#138808]/25 blur-3xl" />
           <div className="absolute -right-24 -top-16 h-64 w-64 rounded-full border border-white/20" />
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.4) 0 1px, transparent 1px)' }} />
 
           <div className="relative z-10">
             <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/25 bg-black/20 px-4 py-2 text-sm">
@@ -154,7 +162,7 @@ export default function Login() {
               {t('login_trusted_hub', 'Trusted civic operations hub')}
             </div>
 
-            <h1 className="max-w-sm text-5xl font-black leading-tight tracking-tight">
+            <h1 className="auth-title max-w-sm text-5xl font-black leading-tight">
               <span className="text-[#ffd08f]">Jansewa</span> <span className="text-[#9ef0c6]">AI</span>
             </h1>
             <p className="mt-3 text-lg font-semibold text-white">{t('login_empowering_citizens', 'Empowering citizens')}</p>
@@ -174,10 +182,10 @@ export default function Login() {
           </div>
         </section>
 
-        <section className="p-6 sm:p-10 lg:p-12 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)]">
+        <section className="auth-panel p-6 sm:p-10 lg:p-12">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h2 className="text-4xl font-black tracking-tight text-slate-900">{titleByMode[mode]}</h2>
+              <h2 className="auth-title text-4xl font-black text-slate-900">{titleByMode[mode]}</h2>
               <p className="mt-2 text-sm text-slate-600">{subtitleByMode[mode]}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white/95 px-3.5 py-2.5 shadow-sm">
@@ -205,14 +213,14 @@ export default function Login() {
 
           <div className="mb-5 flex flex-wrap gap-2">
             {[t('login_chip_secure', 'Secure Login'), t('login_chip_fast', 'Fast Access'), t('login_chip_role', 'Role Aware')].map((chip) => (
-              <span key={chip} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700">
+              <span key={chip} className="auth-chip rounded-full px-3 py-1 text-[11px] font-semibold transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700">
                 {chip}
               </span>
             ))}
           </div>
 
           {mode !== 'forgot' && (
-            <div className="mb-7 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <div className="mb-7 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-1">
               <button
                 type="button"
                 onClick={() => switchMode('login')}
@@ -265,14 +273,14 @@ export default function Login() {
             {mode === 'register' && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_full_name', 'Full name')}</label>
-                <div className="relative">
+                <div className="auth-field relative rounded-xl">
                   <FiUser className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                    className="w-full rounded-xl border border-slate-300 bg-white/90 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition"
                     placeholder={t('login_your_full_name', 'Your full name')}
                     autoComplete="name"
                   />
@@ -286,7 +294,7 @@ export default function Login() {
                 <select
                   value={registerRole}
                   onChange={(e) => setRegisterRole(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-3 px-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                  className="auth-field w-full rounded-xl border border-slate-300 bg-white/90 py-3 px-4 text-sm text-slate-900 outline-none transition"
                 >
                   <option value="CITIZEN">{t('login_role_citizen', 'Citizen')}</option>
                   <option value="LEADER">{t('login_role_leader', 'Leader')}</option>
@@ -297,14 +305,14 @@ export default function Login() {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_email', 'Email address')}</label>
-              <div className="relative">
+              <div className="auth-field relative rounded-xl">
                 <FiMail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                  className="w-full rounded-xl border border-slate-300 bg-white/90 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition"
                   placeholder={t('login_email_placeholder', 'name@domain.gov')}
                   autoComplete="email"
                 />
@@ -327,14 +335,14 @@ export default function Login() {
                 )}
               </div>
 
-              <div className="relative">
+              <div className="auth-field relative rounded-xl">
                 <FiLock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#ff9933] focus:ring-4 focus:ring-[#ffe4c7]"
+                  className="w-full rounded-xl border border-slate-300 bg-white/90 py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition"
                   placeholder={t('login_password_placeholder', 'At least 8 characters')}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 />
@@ -352,14 +360,14 @@ export default function Login() {
             {mode === 'forgot' && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_confirm_new_password', 'Confirm new password')}</label>
-                <div className="relative">
+                <div className="auth-field relative rounded-xl">
                   <FiKey className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#138808] focus:ring-4 focus:ring-[#d8f5d3]"
+                    className="w-full rounded-xl border border-slate-300 bg-white/90 py-3 pl-10 pr-12 text-sm text-slate-900 outline-none transition"
                     placeholder={t('login_confirm_password_placeholder', 'Re-enter your new password')}
                     autoComplete="new-password"
                   />
@@ -378,7 +386,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-r from-[#ff9933] to-[#138808] py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="auth-cta w-full rounded-xl bg-gradient-to-r from-[#ff9933] via-[#f59e0b] to-[#138808] py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? t('login_please_wait', 'Please wait...') : actionLabel}
             </button>

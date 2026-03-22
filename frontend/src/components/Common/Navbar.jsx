@@ -74,10 +74,17 @@ export default function Navbar() {
                 </svg>
               </div>
               <div>
-                <span className="text-[1.68rem] font-black tracking-tight text-gray-900 group-hover:text-[#0a2a63] transition-colors">
-                  Jansewa <span className="text-primary-600">AI</span>
-                </span>
-                <p className="-mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Citizen Governance Network</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="brand-title text-[1.68rem] font-black tracking-tight transition-colors">
+                    Jansewa <span className="brand-title-accent">AI</span>
+                  </span>
+                  <span className="premium-badge inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M12 2L14.4 7.2L20 8.1L15.9 12.1L16.9 18L12 15.1L7.1 18L8.1 12.1L4 8.1L9.6 7.2L12 2Z" />
+                    </svg>
+                  </span>
+                </div>
+                <p className="brand-subtitle -mt-1 text-[11px] font-semibold uppercase tracking-[0.14em]">Citizen Governance Network</p>
               </div>
             </Link>
           </div>

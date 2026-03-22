@@ -45,7 +45,18 @@ const menuItems = [
           d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
       </svg>
     ),
-    roles: ['LEADER', 'DEPARTMENT_HEAD', 'WORKER', 'OFFICER', 'ENGINEER', 'ADMIN'],
+    roles: ['LEADER', 'DEPARTMENT_HEAD', 'OFFICER', 'ENGINEER', 'ADMIN'],
+  },
+  {
+    to: '/worker-manage-complaints',
+    label: 'My Assigned Work',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-8 9l2 2 4-4" />
+      </svg>
+    ),
+    roles: ['WORKER'],
   },
   {
     to: '/social',
@@ -140,15 +151,15 @@ export default function Sidebar() {
   });
 
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
+    `app-sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
       isActive
-        ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-white ring-1 ring-white/25 shadow'
+        ? 'app-sidebar-link-active bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-white ring-1 ring-white/25 shadow'
         : 'text-slate-200 hover:bg-white/10 hover:text-white'
     }`;
 
   return (
     <aside className="hidden lg:flex lg:flex-shrink-0">
-      <div className="w-72 border-r border-slate-900/20 bg-gradient-to-b from-[#0f172a] via-[#0a2a63] to-[#0b3a86] pt-6 pb-5 flex flex-col shadow-2xl">
+      <div className="app-sidebar w-72 border-r border-slate-900/20 bg-gradient-to-b from-[#0f172a] via-[#0a2a63] to-[#0b3a86] pt-6 pb-5 flex flex-col shadow-2xl">
         <div className="mx-4 mb-4 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-100">Control Center</p>
           <p className="mt-1 text-sm font-semibold text-white">Jansewa Operations</p>

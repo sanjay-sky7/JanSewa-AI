@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,7 +22,7 @@ from app.models.audit_log import AuditLog
 from app.models.ward import Ward
 from app.models.user import User
 from app.models.notification_state import NotificationState
-from app.knowledge_base.ward_database import get_nearest_ward
+from app.knowledge_base.ward_database import get_nearest_ward, get_ward, get_ward_by_location
 from app.schemas.complaint import (
     ComplaintCreate,
     ComplaintAssign,
@@ -250,6 +250,22 @@ async def _resolve_citizen_ids_by_phone(db: AsyncSession, phone: Optional[str]) 
     return [row[0] for row in citizens_result.all() if _phone_matches(row[1], phone)]
 
 
+async def _resolve_created_complaint_ids_by_user(db: AsyncSession, user_id: Optional[uuid.UUID]) -> list[uuid.UUID]:
+    if not user_id:
+        return []
+
+    created_result = await db.execute(
+        select(AuditLog.entity_id)
+        .where(
+            AuditLog.entity_type == "complaint",
+            AuditLog.action == "CREATED",
+            AuditLog.performed_by == user_id,
+            AuditLog.entity_id.isnot(None),
+        )
+    )
+    return [row[0] for row in created_result.all() if row[0] is not None]
+
+
 async def _resolve_user_email_by_phone(db: AsyncSession, phone: Optional[str]) -> Optional[str]:
     if not phone:
         return None
@@ -383,6 +399,41 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
         complaint.ai_duration_days = ai_data.get("duration_days")
         complaint.ai_category_confidence = ai_data.get("category_confidence", 0)
 
+        # Improve text complaint location enrichment using ward KB lookup.
+        inferred_ward_id = complaint.ward_id
+        candidate_location_text = ai_data.get("location_text") or complaint.raw_text or ""
+        matched_ward = None
+
+        if ai_data.get("ward_number") and inferred_ward_id is None:
+            ward_from_number = await db.execute(
+                select(Ward).where(Ward.ward_number == ai_data.get("ward_number"))
+            )
+            ward_obj = ward_from_number.scalar_one_or_none()
+            if ward_obj:
+                inferred_ward_id = ward_obj.id
+                matched_ward = get_ward(ai_data.get("ward_number"))
+
+        if inferred_ward_id is None and candidate_location_text:
+            matched_ward = get_ward_by_location(candidate_location_text)
+            if matched_ward:
+                ward_from_kb = await db.execute(
+                    select(Ward).where(Ward.ward_number == int(matched_ward["id"]))
+                )
+                ward_obj = ward_from_kb.scalar_one_or_none()
+                if ward_obj:
+                    inferred_ward_id = ward_obj.id
+
+        if inferred_ward_id is not None:
+            complaint.ward_id = inferred_ward_id
+
+        if matched_ward:
+            if not complaint.ai_location:
+                complaint.ai_location = matched_ward.get("name")
+            if complaint.ai_latitude is None and matched_ward.get("latitude") is not None:
+                complaint.ai_latitude = matched_ward.get("latitude")
+            if complaint.ai_longitude is None and matched_ward.get("longitude") is not None:
+                complaint.ai_longitude = matched_ward.get("longitude")
+
         # Use manually selected category when present; otherwise map AI category.
         cat_name = "Other"
         if complaint.category_id:
@@ -408,6 +459,7 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
                 "ward_id": complaint.ward_id,
                 "category_id": complaint.category_id,
                 "area_sentiment": 0,
+                "severity_keywords": ai_data.get("severity_keywords", []),
             },
             db,
         )
@@ -535,6 +587,7 @@ async def create_complaint(
         entity_id=complaint.id,
         action="CREATED",
         new_value=json.dumps({"status": complaint.status, "note": "Complaint submitted"}),
+        performed_by=getattr(user, "id", None),
     ))
 
     await db.refresh(complaint)
@@ -588,6 +641,51 @@ async def list_complaints(
     total = (await db.execute(count_stmt)).scalar() or 0
 
     # Paginate
+    stmt = (
+        stmt.order_by(desc(Complaint.created_at))
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    result = await db.execute(stmt)
+    items = [ComplaintOut.model_validate(c) for c in result.scalars().all()]
+
+    return ComplaintListOut(items=items, total=total, page=page, per_page=per_page)
+
+
+@router.get("/mine", response_model=ComplaintListOut)
+async def list_my_complaints(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    citizen_ids = await _resolve_citizen_ids_by_phone(db, getattr(user, "phone", None))
+    created_ids = await _resolve_created_complaint_ids_by_user(db, getattr(user, "id", None))
+
+    if not citizen_ids and not created_ids:
+        return ComplaintListOut(items=[], total=0, page=page, per_page=per_page)
+
+    ownership_filters = []
+    if citizen_ids:
+        ownership_filters.append(Complaint.citizen_id.in_(citizen_ids))
+    if created_ids:
+        ownership_filters.append(Complaint.id.in_(created_ids))
+
+    stmt = _complaint_query().where(or_(*ownership_filters))
+
+    if status:
+        stmt = stmt.where(Complaint.status == status)
+    if search:
+        stmt = stmt.where(
+            Complaint.raw_text.ilike(f"%{search}%")
+            | Complaint.ai_summary.ilike(f"%{search}%")
+        )
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar() or 0
+
     stmt = (
         stmt.order_by(desc(Complaint.created_at))
         .offset((page - 1) * per_page)

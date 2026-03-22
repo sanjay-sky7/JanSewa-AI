@@ -22,6 +22,9 @@ export default function WardHeatMap({ data = [] }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
 
+  const totalComplaints = data.reduce((sum, ward) => sum + Number(ward.total_complaints || 0), 0);
+  const highRiskWards = data.filter((ward) => (ward.critical_complaints || 0) > 0).length;
+
   useEffect(() => {
     if (mapInstance.current) return;
 
@@ -88,12 +91,21 @@ export default function WardHeatMap({ data = [] }) {
   }, [data]);
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card telemetry-card overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">{t('heatmap_title', 'Ward Heat Map')}</h3>
-        <p className="text-xs text-gray-500 mt-0.5">{t('heatmap_subtitle', 'Complaint density by geographic area')}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-gray-900">{t('heatmap_title', 'Ward Heat Map')}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{t('heatmap_subtitle', 'Complaint density by geographic area')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="realtime-badge">Live</span>
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">{totalComplaints} total</span>
+            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{highRiskWards} high-risk wards</span>
+          </div>
+        </div>
       </div>
-      <div ref={mapRef} className="h-[400px] w-full" />
+      <div ref={mapRef} className="h-[400px] w-full premium-map-frame" />
       {/* Legend */}
       <div className="px-5 py-3 border-t border-gray-100 flex gap-4 text-xs">
         {Object.entries(severityColor).map(([label, color]) => (

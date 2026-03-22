@@ -13,12 +13,31 @@ export default function StatsCards({ data }) {
   const { t } = useLanguage();
   if (!data) return null;
 
+  const clickableKeys = new Set(['total', 'pending', 'in_progress', 'resolved', 'critical']);
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
       {cards.map((card) => (
         <div
           key={card.key}
-          className={`rounded-2xl border border-white bg-gradient-to-br ${card.tone} p-4 shadow-sm ring-1 ${card.ring}`}
+          role={clickableKeys.has(card.key) ? 'button' : undefined}
+          tabIndex={clickableKeys.has(card.key) ? 0 : undefined}
+          onClick={clickableKeys.has(card.key) ? () => data?.onCardClick?.(card.key) : undefined}
+          onKeyDown={
+            clickableKeys.has(card.key)
+              ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  data?.onCardClick?.(card.key);
+                }
+              }
+              : undefined
+          }
+          className={`rounded-2xl border border-white bg-gradient-to-br ${card.tone} p-4 shadow-sm ring-1 ${card.ring} ${
+            clickableKeys.has(card.key)
+              ? 'cursor-pointer transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md'
+              : ''
+          } ${card.key === 'critical' ? 'leader-attention-card' : ''}`}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center text-lg shadow-sm">

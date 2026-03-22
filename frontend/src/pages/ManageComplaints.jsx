@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { complaintsAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -16,21 +16,82 @@ const STATUS_OPTIONS = [
 
 export default function ManageComplaints() {
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
   const [complaints, setComplaints] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [bucketFilter, setBucketFilter] = useState('');
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState(null);
+
+  const BUCKETS = {
+    total: [],
+    pending: ['OPEN', 'UNDER_REVIEW', 'ASSIGNED', 'VERIFICATION_PENDING'],
+    in_progress: ['IN_PROGRESS'],
+    overdue: ['OPEN', 'UNDER_REVIEW', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_PENDING'],
+    resolved: ['RESOLVED', 'VERIFIED', 'CLOSED'],
+  };
+
+  useEffect(() => {
+    const statusFromUrl = (searchParams.get('status') || '').toUpperCase();
+    const priorityFromUrl = (searchParams.get('priority') || '').toUpperCase();
+    const bucketFromUrl = (searchParams.get('bucket') || '').toLowerCase();
+    const unassignedFromUrl = searchParams.get('unassigned') === '1';
+
+    setUnassignedOnly(unassignedFromUrl);
+
+    if (STATUS_OPTIONS.includes(statusFromUrl)) {
+      setStatusFilter(statusFromUrl);
+      setPriorityFilter('');
+      setBucketFilter('');
+      return;
+    }
+
+    if (priorityFromUrl) {
+      setPriorityFilter(priorityFromUrl);
+      setStatusFilter('');
+      setBucketFilter('');
+      return;
+    }
+
+    if (Object.keys(BUCKETS).includes(bucketFromUrl)) {
+      setBucketFilter(bucketFromUrl);
+      setStatusFilter('');
+      setPriorityFilter('');
+      return;
+    }
+
+    setStatusFilter('');
+    setPriorityFilter('');
+    setBucketFilter('');
+  }, [searchParams]);
 
   async function loadComplaints() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await complaintsAPI.list({
-        per_page: 50,
-        ...(statusFilter ? { status: statusFilter } : {}),
-      });
-      setComplaints(data.items || []);
+      const perPage = 100;
+      let page = 1;
+      let total = 0;
+      const allItems = [];
+
+      do {
+        const { data } = await complaintsAPI.list({
+          page,
+          per_page: perPage,
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(priorityFilter ? { priority_level: priorityFilter } : {}),
+        });
+
+        const items = data?.items || [];
+        total = Number(data?.total || 0);
+        allItems.push(...items);
+        page += 1;
+      } while (allItems.length < total);
+
+      setComplaints(allItems);
     } catch (err) {
       setError(err.response?.data?.detail || t('manage_failed_load', 'Failed to load complaints.'));
     } finally {
@@ -40,7 +101,29 @@ export default function ManageComplaints() {
 
   useEffect(() => {
     loadComplaints();
-  }, [statusFilter]);
+  }, [statusFilter, priorityFilter]);
+
+  const visibleComplaints = useMemo(() => {
+    let result = complaints;
+
+    if (bucketFilter && bucketFilter !== 'total') {
+      const allowedStatuses = BUCKETS[bucketFilter] || [];
+      result = result.filter((c) => allowedStatuses.includes(c.status));
+    }
+
+    if (bucketFilter === 'overdue') {
+      result = result.filter((c) => {
+        const createdAt = new Date(c.created_at).getTime();
+        return Number.isFinite(createdAt) && (Date.now() - createdAt) > (48 * 60 * 60 * 1000);
+      });
+    }
+
+    if (unassignedOnly) {
+      result = result.filter((c) => !c.assignee?.id);
+    }
+
+    return result;
+  }, [complaints, bucketFilter, unassignedOnly]);
 
   async function updateStatus(complaintId, nextStatus) {
     setSavingId(complaintId);
@@ -79,7 +162,11 @@ export default function ManageComplaints() {
           </label>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setBucketFilter('');
+              setPriorityFilter('');
+              setStatusFilter(e.target.value);
+            }}
             className="w-full rounded-xl border border-white/30 bg-white/90 px-3 py-2 text-sm font-medium text-slate-900 backdrop-blur-sm"
           >
             <option value="">{t('manage_all_statuses', 'All statuses')}</option>
@@ -87,6 +174,19 @@ export default function ManageComplaints() {
               <option key={status} value={status}>{statusLabel(status)}</option>
             ))}
           </select>
+          {bucketFilter && (
+            <p className="mt-1 text-xs text-cyan-100">
+              {t('manage_bucket_active', 'Quick filter active')}: {bucketFilter.replace('_', ' ').toUpperCase()}
+            </p>
+          )}
+          {priorityFilter && (
+            <p className="mt-1 text-xs text-cyan-100">
+              Priority filter: {priorityFilter}
+            </p>
+          )}
+          {unassignedOnly && (
+            <p className="mt-1 text-xs text-cyan-100">Unassigned only</p>
+          )}
         </div>
         </div>
       </header>
@@ -115,13 +215,13 @@ export default function ManageComplaints() {
                 <tr>
                   <td className="px-4 py-10 text-center text-gray-400" colSpan={6}>{t('manage_loading', 'Loading complaints...')}</td>
                 </tr>
-              ) : complaints.length === 0 ? (
+              ) : visibleComplaints.length === 0 ? (
                 <tr>
                   <td className="px-4 py-10 text-center text-gray-400" colSpan={6}>{t('manage_no_complaints', 'No complaints found.')}</td>
                 </tr>
               ) : (
-                complaints.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                visibleComplaints.map((c, idx) => (
+                  <tr key={c.id} className="complaint-slide-item hover:bg-slate-50/70 transition-colors" style={{ animationDelay: `${idx * 45}ms` }}>
                     <td className="px-4 py-3">
                       <div className="max-w-md">
                         <p className="line-clamp-2 text-gray-900">{c.raw_text || t('manage_no_text', 'No text summary available')}</p>

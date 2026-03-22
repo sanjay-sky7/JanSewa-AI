@@ -49,6 +49,7 @@ export const complaintsAPI = {
   create: (data) => api.post('/complaints', data),
   categories: () => api.get('/complaints/categories'),
   list: (params) => api.get('/complaints', { params }),
+  mine: (params) => api.get('/complaints/mine', { params }),
   myNotifications: (params) => api.get('/complaints/citizen/notifications', { params }),
   markNotificationsSeen: () => api.post('/complaints/citizen/notifications/mark-seen'),
   get: (id) => api.get(`/complaints/${id}`),
@@ -72,6 +73,7 @@ export const socialAPI = {
   feed: (params) => api.get('/social/feed', { params }),
   sentiment: () => api.get('/social/sentiment'),
   alerts: () => api.get('/social/alerts'),
+  liveSummary: () => api.get('/social/live-summary'),
   scan: () => api.post('/social/scan'),
 };
 
@@ -95,6 +97,7 @@ export const dashboardAPI = {
 export const publicAPI = {
   wardMap: () => api.get('/public/wards/map'),
   wardScorecard: (wardId) => api.get(`/public/ward/${wardId}/scorecard`),
+  wardLeader: (wardId) => api.get(`/public/ward/${wardId}/leader`),
   recentActions: (wardId) => api.get(`/public/ward/${wardId}/actions`),
   wardTrust: (wardId) => api.get(`/public/ward/${wardId}/trust`),
   submitComplaint: (data) => api.post('/public/complaint', data),

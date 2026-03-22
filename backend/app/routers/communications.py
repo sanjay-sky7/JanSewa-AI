@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,11 +60,15 @@ async def generate_communication(
 @router.get("", response_model=list[CommunicationOut])
 async def list_communications(
     status: str = None,
+    comm_type: str = None,
+    limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Communication).order_by(desc(Communication.created_at)).limit(50)
+    stmt = select(Communication).order_by(desc(Communication.created_at)).limit(limit)
     if status:
-        stmt = stmt.where(Communication.status == status)
+        stmt = stmt.where(Communication.status == status.upper())
+    if comm_type:
+        stmt = stmt.where(Communication.comm_type == comm_type.upper())
     result = await db.execute(stmt)
     return [CommunicationOut.model_validate(c) for c in result.scalars().all()]
 

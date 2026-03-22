@@ -9,13 +9,14 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.complaint import Complaint
 from app.models.ward import Ward
+from app.models.social_post import SocialPost
 
-from app.knowledge_base.priority_rules import calculate_priority_kb, ESCALATION_RULES
+from app.knowledge_base.priority_rules import ESCALATION_RULES
 from app.knowledge_base.ward_database import get_ward_vulnerability_score
 from app.knowledge_base.governance_policies import get_sla, get_escalation_target
 
@@ -31,6 +32,22 @@ CATEGORY_URGENCY: dict[str, int] = {
     "Road/Pothole": 60,
     "Garbage": 65,
     "Other": 40,
+}
+
+
+SEVERITY_SIGNAL_SCORES: dict[str, int] = {
+    "urgent": 8,
+    "emergency": 12,
+    "critical": 12,
+    "danger": 10,
+    "accident": 10,
+    "injury": 10,
+    "fire": 12,
+    "flood": 9,
+    "waterlogging": 8,
+    "hospital": 7,
+    "no water": 8,
+    "power cut": 6,
 }
 
 
@@ -59,6 +76,14 @@ async def calculate_priority_score(
     elif duration > 3:
         urgency = min(100, urgency + 5)
 
+    severity_keywords = [str(k).lower() for k in (complaint_data.get("severity_keywords") or [])]
+    severity_boost = 0
+    for token in severity_keywords:
+        for signal, score in SEVERITY_SIGNAL_SCORES.items():
+            if signal in token:
+                severity_boost = max(severity_boost, score)
+    urgency = min(100, urgency + severity_boost)
+
     # ── FACTOR 2: IMPACT (25%) ───────────────────────────
     impact_map = {
         "individual": 20,
@@ -71,12 +96,19 @@ async def calculate_priority_score(
         complaint_data.get("affected_estimate", "individual"), 20
     )
 
+    if duration >= 14:
+        impact = min(100, impact + 10)
+    elif duration >= 7:
+        impact = min(100, impact + 5)
+
     # ── FACTOR 3: RECURRENCE (20%) ───────────────────────
     ward_id = complaint_data.get("ward_id")
     recurrence = 0
+    aged_backlog = 0
     if ward_id:
         try:
             thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+            seven_days_ago = datetime.utcnow() - timedelta(days=7)
             stmt = (
                 select(func.count())
                 .select_from(Complaint)
@@ -91,25 +123,113 @@ async def calculate_priority_score(
 
             result = await db.execute(stmt)
             count = result.scalar() or 0
-            recurrence = min(100, count * 15)
+
+            open_stmt = (
+                select(func.count())
+                .select_from(Complaint)
+                .where(
+                    Complaint.ward_id == ward_id,
+                    Complaint.created_at >= thirty_days_ago,
+                    Complaint.status.in_(["OPEN", "UNDER_REVIEW", "ASSIGNED", "IN_PROGRESS", "VERIFICATION_PENDING"]),
+                )
+            )
+            if category_id:
+                open_stmt = open_stmt.where(Complaint.category_id == category_id)
+
+            open_result = await db.execute(open_stmt)
+            unresolved_count = open_result.scalar() or 0
+
+            aged_stmt = (
+                select(func.count())
+                .select_from(Complaint)
+                .where(
+                    Complaint.ward_id == ward_id,
+                    Complaint.status.in_(["OPEN", "UNDER_REVIEW", "ASSIGNED", "IN_PROGRESS", "VERIFICATION_PENDING"]),
+                    Complaint.created_at <= seven_days_ago,
+                )
+            )
+            if category_id:
+                aged_stmt = aged_stmt.where(Complaint.category_id == category_id)
+
+            aged_result = await db.execute(aged_stmt)
+            aged_backlog = aged_result.scalar() or 0
+
+            recurrence = min(100, count * 8 + unresolved_count * 8 + aged_backlog * 12)
         except Exception as e:
             logger.warning(f"Recurrence calculation failed: {e}")
 
     # ── FACTOR 4: SENTIMENT (15%) ────────────────────────
-    sentiment_score_raw = complaint_data.get("area_sentiment", 50)
-    sentiment_priority = max(0, 100 - int((sentiment_score_raw + 1) * 50))
+    sentiment_score_raw = complaint_data.get("area_sentiment", 0)
+    if isinstance(sentiment_score_raw, (int, float)) and -1.0 <= float(sentiment_score_raw) <= 1.0:
+        sentiment_priority = max(0, 100 - int((float(sentiment_score_raw) + 1) * 50))
+    else:
+        sentiment_priority = 50
+
+    negative_keyword_signals = ["angry", "protest", "unsafe", "hazard", "serious"]
+    if any(sig in token for sig in negative_keyword_signals for token in severity_keywords):
+        sentiment_priority = min(100, sentiment_priority + 8)
 
     # ── FACTOR 5: VULNERABILITY (10%) ────────────────────
     vulnerability = 30
+    ward_number = None
     if ward_id:
         try:
+            vulnerability = get_ward_vulnerability_score(int(ward_id))
             stmt = select(Ward).where(Ward.id == ward_id)
             result = await db.execute(stmt)
             ward = result.scalar_one_or_none()
             if ward and ward.is_vulnerable:
-                vulnerability = 90
+                vulnerability = max(vulnerability, 85)
+            if ward:
+                ward_number = ward.ward_number
         except Exception as e:
             logger.warning(f"Vulnerability check failed: {e}")
+
+    # ── SOCIAL PRESSURE (real-time public signals) ──────
+    social_pressure = 0
+    try:
+        social_window = datetime.utcnow() - timedelta(days=7)
+        social_stmt = (
+            select(
+                func.count(SocialPost.id).label("total"),
+                func.sum(case((SocialPost.sentiment == "NEGATIVE", 1), else_=0)).label("negative"),
+                func.sum(case((SocialPost.sentiment == "ANGRY", 1), else_=0)).label("angry"),
+                func.sum(case((SocialPost.is_misinformation == True, 1), else_=0)).label("misinfo"),
+                func.sum(case((SocialPost.virality_score >= 70, 1), else_=0)).label("viral"),
+            )
+            .where(SocialPost.created_at >= social_window)
+        )
+
+        if ward_number is not None:
+            social_stmt = social_stmt.where(SocialPost.extracted_ward == ward_number)
+
+        category_value = str(category or "").strip().lower().replace("/", " ")
+        category_aliases = {
+            "water supply": ["water", "water supply"],
+            "road pothole": ["road", "pothole"],
+            "electricity": ["electricity", "power"],
+            "drainage": ["drainage", "sewage", "waterlogging"],
+            "garbage": ["garbage", "sanitation", "waste"],
+            "health": ["health", "medical", "disease"],
+            "public safety": ["safety", "security", "crime", "accident"],
+        }
+        alias_terms = category_aliases.get(category_value, [])
+        if alias_terms:
+            category_filters = [SocialPost.extracted_category.ilike(f"%{term}%") for term in alias_terms]
+            social_stmt = social_stmt.where(or_(*category_filters))
+
+        social_row = (await db.execute(social_stmt)).one_or_none()
+        if social_row:
+            negative_count = int(social_row.negative or 0)
+            angry_count = int(social_row.angry or 0)
+            misinfo_count = int(social_row.misinfo or 0)
+            viral_count = int(social_row.viral or 0)
+            social_pressure = min(100, negative_count * 8 + angry_count * 12 + misinfo_count * 10 + viral_count * 6)
+
+            recurrence = min(100, recurrence + int(social_pressure * 0.30))
+            sentiment_priority = min(100, sentiment_priority + int(social_pressure * 0.25))
+    except Exception as e:
+        logger.warning(f"Social pressure calculation failed: {e}")
 
     # ── COMPOSITE SCORE ──────────────────────────────────
     final_score = int(
@@ -119,6 +239,12 @@ async def calculate_priority_score(
         + 0.15 * sentiment_priority
         + 0.10 * vulnerability
     )
+
+    # Escalate compound risk combinations so high-impact emergencies do not under-rank.
+    if complaint_data.get("is_emergency") and (impact >= 75 or recurrence >= 55):
+        final_score = min(100, final_score + 8)
+    if vulnerability >= 75 and recurrence >= 50:
+        final_score = min(100, final_score + 5)
 
     if final_score >= 80:
         level = "CRITICAL"
@@ -135,6 +261,7 @@ async def calculate_priority_score(
         "recurrence_score": recurrence,
         "sentiment_score": int(sentiment_priority),
         "vulnerability_score": vulnerability,
+        "social_pressure_score": social_pressure,
         "final_priority_score": final_score,
         "priority_level": level,
         "scoring_breakdown": {
@@ -143,6 +270,7 @@ async def calculate_priority_score(
             "recurrence": f"{recurrence} × 0.20 = {0.20 * recurrence:.1f}",
             "sentiment": f"{int(sentiment_priority)} × 0.15 = {0.15 * sentiment_priority:.1f}",
             "vulnerability": f"{vulnerability} × 0.10 = {0.10 * vulnerability:.1f}",
+            "social_pressure": f"{social_pressure} (adjusts recurrence + sentiment)",
         },
         # ── KB enrichment ────────────────────────────────
         "sla": get_sla(level.lower()),

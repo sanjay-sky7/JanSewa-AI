@@ -14,27 +14,41 @@ export default function SocialMediaInsights() {
   const [posts, setPosts] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [sentimentData, setSentimentData] = useState(null);
+  const [liveSummary, setLiveSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [platformFilter, setPlatformFilter] = useState('');
+  const [sentimentFilter, setSentimentFilter] = useState('');
+  const [onlyComplaints, setOnlyComplaints] = useState(false);
+  const [onlyMisinformation, setOnlyMisinformation] = useState(false);
 
   useEffect(() => {
     loadData();
     const timer = setInterval(() => loadData(false), 20000);
     return () => clearInterval(timer);
-  }, []);
+  }, [platformFilter, sentimentFilter, onlyComplaints, onlyMisinformation]);
 
   async function loadData(withSpinner = true) {
     if (withSpinner) setLoading(true);
     try {
-      const [feedRes, alertRes, sentRes] = await Promise.allSettled([
-        socialAPI.feed({ limit: 30 }),
+      const [feedRes, alertRes, sentRes, liveRes] = await Promise.allSettled([
+        socialAPI.feed({
+          limit: 40,
+          since_minutes: 240,
+          ...(platformFilter ? { platform: platformFilter } : {}),
+          ...(sentimentFilter ? { sentiment: sentimentFilter } : {}),
+          ...(onlyComplaints ? { only_complaints: true } : {}),
+          ...(onlyMisinformation ? { only_misinformation: true } : {}),
+        }),
         socialAPI.alerts(),
         socialAPI.sentiment(),
+        socialAPI.liveSummary(),
       ]);
       if (feedRes.status === 'fulfilled') setPosts(feedRes.value.data || []);
       if (alertRes.status === 'fulfilled') setAlerts(alertRes.value.data || []);
       if (sentRes.status === 'fulfilled') setSentimentData(sentRes.value.data);
+      if (liveRes.status === 'fulfilled') setLiveSummary(liveRes.value.data);
       setLastRefresh(new Date());
     } finally {
       if (withSpinner) setLoading(false);
@@ -63,33 +77,71 @@ export default function SocialMediaInsights() {
   const activePlatforms = new Set(posts.map((p) => String(p.platform || '').toLowerCase()).filter(Boolean)).size;
   const complaintSignals = posts.filter((p) => p.is_complaint).length;
   const misinformationSignals = posts.filter((p) => p.is_misinformation).length;
+  const topWards = liveSummary?.top_wards_last_60m || [];
+  const topCategories = liveSummary?.top_categories_last_60m || [];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-blue-900 to-cyan-800 p-6 text-white shadow-lg">
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-[#0f172a] via-[#0b3a86] to-[#0f766e] p-6 text-white shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+          <div>
             <h1 className="text-2xl font-bold">{t('social_title', 'Social Media Intelligence')}</h1>
             <p className="mt-1 text-sm text-cyan-100">{t('social_subtitle', 'Real-time monitoring of public discourse')}</p>
             <p className="mt-2 text-xs text-cyan-200">
               {t('social_auto_refresh_20s', 'Auto refresh every 20s')} • {lastRefresh ? lastRefresh.toLocaleTimeString() : t('public_syncing', 'Syncing...')}
             </p>
-          </div>
-          <button
-            onClick={handleScan}
-            disabled={scanning}
-            className="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-50 transition-colors flex items-center gap-2"
-          >
-            {scanning ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                {t('social_scanning', 'Scanning...')}
-              </>
-            ) : (
-              t('social_scan_now', 'Scan Now')
+            {liveSummary && (
+              <p className="mt-1 text-xs text-cyan-100/90">
+                Live 15m: {liveSummary.signals_last_15m || 0} signals • {liveSummary.complaints_last_15m || 0} civic complaints • {liveSummary.misinfo_last_15m || 0} misinformation
+              </p>
             )}
-          </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              className="premium-select rounded-lg px-3 py-2 text-xs"
+            >
+              <option value="">All Platforms</option>
+              <option value="twitter">Twitter</option>
+              <option value="facebook">Facebook</option>
+              <option value="instagram">Instagram</option>
+            </select>
+            <select
+              value={sentimentFilter}
+              onChange={(e) => setSentimentFilter(e.target.value)}
+              className="premium-select rounded-lg px-3 py-2 text-xs"
+            >
+              <option value="">All Sentiments</option>
+              <option value="POSITIVE">Positive</option>
+              <option value="NEGATIVE">Negative</option>
+              <option value="ANGRY">Angry</option>
+              <option value="NEUTRAL">Neutral</option>
+            </select>
+            <label className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-xs">
+              <input type="checkbox" checked={onlyComplaints} onChange={(e) => setOnlyComplaints(e.target.checked)} />
+              Civic only
+            </label>
+            <label className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-xs">
+              <input type="checkbox" checked={onlyMisinformation} onChange={(e) => setOnlyMisinformation(e.target.checked)} />
+              Misinfo only
+            </label>
+            <button
+              onClick={handleScan}
+              disabled={scanning}
+              className="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-white/25 disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              {scanning ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  {t('social_scanning', 'Scanning...')}
+                </>
+              ) : (
+                t('social_scan_now', 'Scan Now')
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -110,6 +162,35 @@ export default function SocialMediaInsights() {
         </div>
       )}
 
+      {liveSummary && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="card p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Live Hotspot Wards (60m)</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {topWards.length === 0 ? (
+                <span className="text-sm text-slate-500">No ward hotspots in last 60 minutes.</span>
+              ) : topWards.map((entry) => (
+                <span key={`ward-${entry.ward}`} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  Ward {entry.ward} • {entry.count}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="card p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Issue Themes (60m)</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {topCategories.length === 0 ? (
+                <span className="text-sm text-slate-500">No category hotspots in last 60 minutes.</span>
+              ) : topCategories.map((entry) => (
+                <span key={`cat-${entry.category}`} className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                  {entry.category} • {entry.count}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Alerts */}
       {alerts.length > 0 && (
         <div className="card overflow-hidden">
@@ -118,7 +199,7 @@ export default function SocialMediaInsights() {
           </div>
           <div className="divide-y max-h-60 overflow-y-auto">
             {alerts.map((a, i) => (
-              <div key={i} className="px-5 py-3 flex items-start gap-3">
+              <div key={i} className="complaint-slide-item px-5 py-3 flex items-start gap-3" style={{ animationDelay: `${i * 55}ms` }}>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-900 line-clamp-2">{a.post_text || t('alerts_social_detected', 'Social alert detected')}</p>
                   <p className="text-xs text-gray-500 mt-1">{String(a.platform || 'social').toUpperCase()} • {a.sentiment}</p>
@@ -145,7 +226,7 @@ export default function SocialMediaInsights() {
             <p className="px-5 py-8 text-center text-gray-400">{t('social_no_posts', 'No posts found. Click "Scan Now" to fetch.')}</p>
           ) : (
             posts.map((post, i) => (
-              <div key={i} className="px-5 py-4">
+              <div key={i} className="complaint-slide-item px-5 py-4" style={{ animationDelay: `${i * 45}ms` }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -167,6 +248,7 @@ export default function SocialMediaInsights() {
                         {post.extracted_category || ''}
                       </p>
                     )}
+                    <p className="mt-1 text-[11px] text-slate-400">{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</p>
                   </div>
                   <div className="text-right text-xs text-gray-400">
                     <p>❤️ {post.likes || 0}</p>

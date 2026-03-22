@@ -29,7 +29,8 @@ export default function AlertsPanel({ alerts = [] }) {
           return (
             <div
               key={i}
-              className={`px-5 py-3 border-l-4 ${severityStyles[sev] || severityStyles.info}`}
+              className={`complaint-slide-item px-5 py-3 border-l-4 ${severityStyles[sev] || severityStyles.info}`}
+              style={{ animationDelay: `${i * 55}ms` }}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>

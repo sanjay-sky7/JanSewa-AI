@@ -79,17 +79,19 @@ Request → KB Analysis (always works, 0ms API latency)
 
 ```bash
 # Clone the repository
-git clone https://github.com/teaminfinimind/jansewa-ai.git
 git clone https://github.com/sanjay-sky7/JanSewa-AI
 cd jansewa-ai
-
-# Configure environment
+# Configure backend env
 cp backend/.env.example backend/.env
+# On Windows PowerShell, use:
+# Copy-Item backend/.env.example backend/.env
+
+# Edit required values (at least DATABASE_URL, DATABASE_SYNC_URL, JWT_SECRET)
+# backend/.env
+# Start all services
+docker compose up -d --build
 # Edit backend/.env — only DATABASE_URL and JWT_SECRET are required
 # All API keys are OPTIONAL
-
-# Start all services
-docker compose up --build
 ```
 
 | Service | URL |
@@ -104,6 +106,11 @@ Note:
 - Open the app UI at http://localhost:3000.
 - http://localhost:8000 is the backend API server (JSON responses).
 - API root is available at http://localhost:8000/ and health check at http://localhost:8000/api/health.
+
+Data persistence across different machines:
+- By default, Docker uses the local `postgres_data` volume on each machine, so users/complaints created on Machine A do not automatically appear on Machine B.
+- To share the same accounts and complaints across systems, point both machines to the same PostgreSQL instance via `DATABASE_URL` / `DATABASE_SYNC_URL`.
+- For citizen accounts, keep a phone number in the profile. Complaint ownership now uses authenticated identity and phone linkage for stronger matching.
 
 ### Option B: Manual Setup
 

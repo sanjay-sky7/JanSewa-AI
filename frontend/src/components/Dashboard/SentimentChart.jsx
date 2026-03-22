@@ -15,6 +15,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 
 export default function SentimentChart({ data = [] }) {
   const { t } = useLanguage();
+  const latestPoint = data.length ? data[data.length - 1] : null;
   const chartData = {
     labels: data.map((d) => d.date),
     datasets: [
@@ -58,10 +59,22 @@ export default function SentimentChart({ data = [] }) {
   };
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card telemetry-card overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">{t('sentiment_title', 'Sentiment Trend')}</h3>
-        <p className="text-xs text-gray-500 mt-0.5">{t('sentiment_subtitle', 'Public sentiment over time from social media')}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-gray-900">{t('sentiment_title', 'Sentiment Trend')}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{t('sentiment_subtitle', 'Public sentiment over time from social media')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="realtime-badge">Live</span>
+            {latestPoint && (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                P:{latestPoint.positive || 0} N:{latestPoint.negative || 0}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
       <div className="p-4 h-[320px]">
         <Line data={chartData} options={options} />

@@ -31,11 +31,11 @@ function ProtectedLayout({ children }) {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="min-h-screen flex flex-col app-shell-bg">
+    <div className="premium-shell min-h-screen flex flex-col app-shell-bg">
       <Navbar />
       <div className="flex flex-1">
         <Sidebar />
-        <main className="flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8">
+        <main className="premium-main flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-[1480px]">
             {children}
             <Footer />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { dashboardAPI, complaintsAPI, socialAPI } from '../services/api';
 import StatsCards from '../components/Dashboard/StatsCards';
 import PriorityQueue from '../components/Dashboard/PriorityQueue';
@@ -10,6 +11,7 @@ import { useLanguage } from '../context/LanguageContext';
 
 export default function LeaderDashboard() {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [queue, setQueue] = useState([]);
   const [heatmap, setHeatmap] = useState([]);
@@ -69,6 +71,38 @@ export default function LeaderDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  function handleStatCardClick(cardKey) {
+    if (cardKey === 'total') {
+      navigate('/manage-complaints?bucket=total');
+      return;
+    }
+    if (cardKey === 'resolved') {
+      navigate('/manage-complaints?bucket=resolved');
+      return;
+    }
+    if (cardKey === 'pending') {
+      navigate('/manage-complaints?bucket=pending');
+      return;
+    }
+    if (cardKey === 'in_progress') {
+      navigate('/manage-complaints?bucket=pending');
+      return;
+    }
+    if (cardKey === 'critical') {
+      navigate('/manage-complaints?priority=CRITICAL');
+    }
+  }
+
+  const attention = {
+    totalActive: queue.length,
+    critical: queue.filter((c) => c.priority_level === 'CRITICAL').length,
+    unassigned: queue.filter((c) => !c.assignee?.id).length,
+    overdue48h: queue.filter((c) => {
+      const createdAt = new Date(c.created_at).getTime();
+      return Number.isFinite(createdAt) && (Date.now() - createdAt) > (48 * 60 * 60 * 1000);
+    }).length,
+  };
+
   if (loading) return <LoadingSpinner label={t('dashboard_loading', 'Loading dashboard...')} />;
 
   return (
@@ -97,7 +131,47 @@ export default function LeaderDashboard() {
       )}
 
       {/* Stats */}
-      <StatsCards data={stats} />
+      <StatsCards data={{ ...(stats || {}), onCardClick: handleStatCardClick }} />
+
+      <section className="leader-attention-board card p-0 overflow-hidden">
+        <div className="border-b border-red-100 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50 px-5 py-3">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">Priority Attention Center</p>
+          <h3 className="mt-1 text-lg font-extrabold text-slate-900">Leader Focus Queue</h3>
+        </div>
+        <div className="grid gap-3 p-4 md:grid-cols-4">
+          <AttentionTile label="Active Queue" value={attention.totalActive} onClick={() => navigate('/manage-complaints?bucket=pending')} tone="slate" />
+          <AttentionTile label="Critical" value={attention.critical} onClick={() => navigate('/manage-complaints?priority=CRITICAL')} tone="red" />
+          <AttentionTile label="Unassigned" value={attention.unassigned} onClick={() => navigate('/manage-complaints?bucket=pending&unassigned=1')} tone="amber" />
+          <AttentionTile label="Overdue 48h+" value={attention.overdue48h} onClick={() => navigate('/manage-complaints?bucket=overdue')} tone="orange" />
+        </div>
+      </section>
+
+      {/* Live stream */}
+      <section className="card overflow-hidden p-0">
+        <div className="border-b border-slate-100 px-5 py-3">
+          <h3 className="text-sm font-semibold text-slate-900">{t('dashboard_live_stream', 'Live Complaint Stream')}</h3>
+          <p className="text-xs text-slate-500">{t('dashboard_live_stream_sub', 'Auto-moving feed of highest-priority complaints')}</p>
+        </div>
+        {queue.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-slate-500">{t('queue_empty', 'No complaints in queue')}</p>
+        ) : (
+          <div className="complaint-marquee-wrap">
+            <div className="complaint-marquee-track">
+              {[...queue.slice(0, 12), ...queue.slice(0, 12)].map((item, idx) => (
+                <button
+                  type="button"
+                  key={`${item.id}-${idx}`}
+                  className="complaint-chip"
+                  onClick={() => navigate(`/complaints/${item.id}`)}
+                >
+                  <span className="complaint-chip-priority">{item.priority_level || 'LOW'}</span>
+                  <span className="complaint-chip-text">{item.ai_summary || item.raw_text || t('queue_complaint_fallback', 'Complaint')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Two-column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -111,5 +185,25 @@ export default function LeaderDashboard() {
         <SentimentChart data={sentiment} />
       </div>
     </div>
+  );
+}
+
+function AttentionTile({ label, value, onClick, tone = 'slate' }) {
+  const tones = {
+    slate: 'from-slate-100 to-slate-50 text-slate-900 border-slate-200',
+    red: 'from-red-100 to-rose-50 text-red-900 border-red-200',
+    amber: 'from-amber-100 to-orange-50 text-amber-900 border-amber-200',
+    orange: 'from-orange-100 to-amber-50 text-orange-900 border-orange-200',
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`complaint-slide-item rounded-xl border bg-gradient-to-br p-3 text-left transition hover:-translate-y-0.5 hover:shadow ${tones[tone] || tones.slate}`}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+    </button>
   );
 }

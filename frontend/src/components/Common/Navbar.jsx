@@ -54,7 +54,7 @@ export default function Navbar() {
   }, [openNotifications, unreadCount, user?.role]);
 
   return (
-    <nav className="app-navbar sticky top-0 z-40 border-b border-white/60 bg-white/80 backdrop-blur-xl">
+    <nav className="app-navbar premium-navbar sticky top-0 z-40 border-b border-white/60 bg-white/80 backdrop-blur-xl">
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-[72px] justify-between py-2">
           {/* Logo */}
@@ -88,12 +88,12 @@ export default function Navbar() {
 
             <Link
               to="/help"
-              className="hidden md:inline-flex items-center rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-3 py-2 text-xs font-semibold text-slate-700 hover:from-slate-100 hover:to-slate-50"
+              className="premium-nav-chip hidden md:inline-flex items-center rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-3 py-2 text-xs font-semibold text-slate-700 hover:from-slate-100 hover:to-slate-50"
             >
               {t('nav_help_center', 'Help Center')}
             </Link>
 
-            <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 p-0.5 shadow-sm">
+            <div className="premium-nav-chip flex items-center rounded-xl border border-gray-200 bg-gray-50 p-0.5 shadow-sm">
               <button
                 type="button"
                 onClick={() => setLanguage('en')}
@@ -113,7 +113,7 @@ export default function Navbar() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              className="premium-nav-chip inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
               title={theme === 'dark' ? t('nav_theme_light', 'Switch to light mode') : t('nav_theme_dark', 'Switch to dark mode')}
               aria-label={theme === 'dark' ? t('nav_theme_light', 'Switch to light mode') : t('nav_theme_dark', 'Switch to dark mode')}
             >

@@ -140,16 +140,16 @@ export default function Sidebar() {
   });
 
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
+    `premium-nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
       isActive
-        ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-white ring-1 ring-white/25 shadow'
-        : 'text-slate-200 hover:bg-white/10 hover:text-white'
+        ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-white ring-1 ring-cyan-100/30 shadow'
+        : 'text-slate-100 hover:bg-white/10 hover:text-white'
     }`;
 
   return (
     <aside className="hidden lg:flex lg:flex-shrink-0">
-      <div className="w-72 border-r border-slate-900/20 bg-gradient-to-b from-[#0f172a] via-[#0a2a63] to-[#0b3a86] pt-6 pb-5 flex flex-col shadow-2xl">
-        <div className="mx-4 mb-4 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+      <div className="premium-sidebar w-72 border-r border-slate-900/20 pt-6 pb-5 flex flex-col shadow-2xl">
+        <div className="mx-4 mb-4 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-100">Control Center</p>
           <p className="mt-1 text-sm font-semibold text-white">Jansewa Operations</p>
         </div>

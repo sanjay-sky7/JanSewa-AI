@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Auth ─────────────────────────────────────────────────
@@ -138,6 +138,31 @@ class CommunicationGenerate(BaseModel):
     )
     format: str = Field(default="whatsapp", pattern="^(whatsapp|social_media|official_notice)$")
 
+    @field_validator("comm_type", mode="before")
+    @classmethod
+    def normalize_comm_type(cls, value: str) -> str:
+        raw = str(value or "").strip().upper()
+        aliases = {
+            "PRESS_RELEASE": "WEEKLY_DIGEST",
+            "SOCIAL_UPDATE": "PROGRESS",
+            "CITIZEN_NOTICE": "ACKNOWLEDGMENT",
+            "EMERGENCY_ALERT": "CRISIS_RESPONSE",
+            "PROGRESS_REPORT": "PROGRESS",
+            "ACK": "ACKNOWLEDGMENT",
+        }
+        return aliases.get(raw, raw)
+
+    @field_validator("format", mode="before")
+    @classmethod
+    def normalize_format(cls, value: str) -> str:
+        raw = str(value or "").strip().lower()
+        aliases = {
+            "formal": "official_notice",
+            "simple": "whatsapp",
+            "social": "social_media",
+        }
+        return aliases.get(raw, raw)
+
 
 class CommunicationOut(BaseModel):
     id: uuid.UUID
@@ -192,6 +217,24 @@ class PublicAction(BaseModel):
     status: str
     resolved_at: Optional[datetime] = None
     has_verification: bool = False
+
+
+class PublicLeaderOut(BaseModel):
+    ward_id: int
+    ward_number: int
+    ward_name: str
+    leader_name: str
+    leader_role: str
+    leader_department: Optional[str] = None
+    leader_phone: Optional[str] = None
+    leader_email: Optional[str] = None
+    office_hours: Optional[str] = None
+    key_focus: list[str] = []
+    total_complaints_30d: int = 0
+    resolved_complaints_30d: int = 0
+    pending_complaints_30d: int = 0
+    resolution_rate_30d: float = 0.0
+    ward_trust_score: Optional[float] = None
 
 
 class TrustScoreOut(BaseModel):

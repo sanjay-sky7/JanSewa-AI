@@ -29,7 +29,8 @@ export default function PriorityQueue({ complaints = [] }) {
           <Link
             key={c.id}
             to={`/complaints/${c.id}`}
-            className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors"
+            className="complaint-slide-item flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors"
+            style={{ animationDelay: `${idx * 60}ms` }}
           >
             <span className="text-xs font-bold text-gray-400 mt-1 w-5 text-right">
               {idx + 1}

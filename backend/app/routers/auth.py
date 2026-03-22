@@ -76,6 +76,9 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    if body.role == "CITIZEN" and not (body.phone or "").strip():
+        raise HTTPException(status_code=400, detail="Phone number is required for citizen registration")
+
     resolved_ward_id = None
     if body.ward_id is not None:
         ward_result = await db.execute(

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { complaintsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -37,9 +37,11 @@ function statusTone(status) {
 export default function MyComplaints() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [bucketFilter, setBucketFilter] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
@@ -50,9 +52,23 @@ export default function MyComplaints() {
       const matchesStatus = !statusFilter || item.status === statusFilter;
       const text = `${item.raw_text || ''} ${item.ai_summary || ''}`.toLowerCase();
       const matchesQuery = !query.trim() || text.includes(query.trim().toLowerCase());
-      return matchesStatus && matchesQuery;
+      const createdAt = new Date(item.created_at).getTime();
+
+      const bucketMatch = (() => {
+        if (!bucketFilter || bucketFilter === 'total') return true;
+        if (bucketFilter === 'active') return ['OPEN', 'UNDER_REVIEW', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_PENDING'].includes(item.status);
+        if (bucketFilter === 'resolved') return ['RESOLVED', 'VERIFIED', 'CLOSED'].includes(item.status);
+        if (bucketFilter === 'critical') return item.priority_level === 'CRITICAL';
+        if (bucketFilter === 'overdue') {
+          const isActive = ['OPEN', 'UNDER_REVIEW', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_PENDING'].includes(item.status);
+          return isActive && Number.isFinite(createdAt) && (Date.now() - createdAt) > (7 * 24 * 60 * 60 * 1000);
+        }
+        return true;
+      })();
+
+      return matchesStatus && matchesQuery && bucketMatch;
     });
-  }, [items, statusFilter, query]);
+  }, [items, statusFilter, query, bucketFilter]);
 
   const summary = useMemo(() => {
     const open = items.filter((i) => ['OPEN', 'UNDER_REVIEW', 'ASSIGNED'].includes(i.status)).length;
@@ -68,16 +84,26 @@ export default function MyComplaints() {
 
   useEffect(() => {
     loadComplaints();
-  }, [user?.phone]);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const bucketFromUrl = (searchParams.get('bucket') || '').toLowerCase();
+    if (bucketFromUrl) {
+      setBucketFilter(bucketFromUrl);
+      setStatusFilter('');
+    } else {
+      setBucketFilter('');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadNotifications();
     const timer = setInterval(loadNotifications, 30000);
     return () => clearInterval(timer);
-  }, [user?.phone]);
+  }, [user?.id, user?.role]);
 
   async function loadComplaints() {
-    if (!user?.phone) {
+    if (!user) {
       setItems([]);
       return;
     }
@@ -86,12 +112,23 @@ export default function MyComplaints() {
     setError('');
 
     try {
-      const { data } = await complaintsAPI.list({
-        page: 1,
-        per_page: 100,
-        citizen_phone: user.phone,
-      });
-      setItems(data.items || []);
+      const perPage = 100;
+      let page = 1;
+      let total = 0;
+      const allItems = [];
+
+      do {
+        const { data } = await complaintsAPI.mine({
+          page,
+          per_page: perPage,
+        });
+        const itemsPage = data?.items || [];
+        total = Number(data?.total || 0);
+        allItems.push(...itemsPage);
+        page += 1;
+      } while (allItems.length < total);
+
+      setItems(allItems);
     } catch (err) {
       setError(err.response?.data?.detail || t('manage_failed_load', 'Failed to load complaints.'));
       setItems([]);
@@ -101,7 +138,7 @@ export default function MyComplaints() {
   }
 
   async function loadNotifications() {
-    if (!user?.phone) {
+    if (user?.role !== 'CITIZEN') {
       setNotifications([]);
       return;
     }
@@ -150,7 +187,7 @@ export default function MyComplaints() {
 
       {!user?.phone && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {t('my_add_mobile_hint', 'Add your mobile number in My Profile to view complaint history.')}
+          {t('my_add_mobile_hint', 'Add your mobile number in My Profile for SMS and faster identity linking.')}
         </div>
       )}
 
@@ -169,7 +206,10 @@ export default function MyComplaints() {
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">{t('my_status', 'Status')}</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setBucketFilter('');
+                setStatusFilter(e.target.value);
+              }}
               className="my-input w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm"
             >
               <option value="">{t('my_all_statuses', 'All statuses')}</option>

@@ -16,10 +16,12 @@ from app.models.verification import Verification
 from app.models.trust_score import TrustScore
 from app.models.citizen import Citizen
 from app.models.audit_log import AuditLog
-from app.schemas.dashboard import WardScorecard, PublicAction, TrustScoreOut, PublicWardMapItem
+from app.models.user import User
+from app.schemas.dashboard import WardScorecard, PublicAction, TrustScoreOut, PublicWardMapItem, PublicLeaderOut
 from app.schemas.complaint import ComplaintCreate, ComplaintOut
 from app.schemas.dashboard import HelpCenterOut
 from app.knowledge_base.help_center import get_help_center_content
+from app.knowledge_base.ward_database import get_ward
 
 router = APIRouter()
 
@@ -207,6 +209,72 @@ async def ward_trust(ward_id: int, db: AsyncSession = Depends(get_db)):
     if not trust:
         return None
     return TrustScoreOut.model_validate(trust)
+
+
+@router.get("/ward/{ward_id}/leader", response_model=Optional[PublicLeaderOut])
+async def ward_leader(ward_id: int, db: AsyncSession = Depends(get_db)):
+    ward = await _resolve_ward(ward_id, db)
+    if not ward:
+        raise HTTPException(status_code=404, detail="Ward not found")
+
+    ward_users = (
+        await db.execute(
+            select(User).where(
+                User.ward_id == ward.id,
+                User.role.in_(["LEADER", "DEPARTMENT_HEAD"]),
+            )
+        )
+    ).scalars().all()
+
+    selected_user = next((u for u in ward_users if u.role == "LEADER"), None)
+    if not selected_user and ward_users:
+        selected_user = ward_users[0]
+
+    ward_kb = get_ward(int(ward.ward_number)) or {}
+
+    if not selected_user and not ward_kb:
+        return None
+
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    total_30d = (await db.execute(
+        select(func.count()).select_from(Complaint).where(
+            Complaint.ward_id == ward.id,
+            Complaint.created_at >= thirty_days_ago,
+        )
+    )).scalar() or 0
+    resolved_30d = (await db.execute(
+        select(func.count()).select_from(Complaint).where(
+            Complaint.ward_id == ward.id,
+            Complaint.created_at >= thirty_days_ago,
+            Complaint.status.in_(["RESOLVED", "VERIFIED", "CLOSED"]),
+        )
+    )).scalar() or 0
+    pending_30d = max(total_30d - resolved_30d, 0)
+
+    trust_latest = (await db.execute(
+        select(TrustScore)
+        .where(TrustScore.ward_id == ward.id)
+        .order_by(TrustScore.date.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+
+    return PublicLeaderOut(
+        ward_id=ward.id,
+        ward_number=ward.ward_number,
+        ward_name=ward.ward_name,
+        leader_name=(selected_user.name if selected_user else ward_kb.get("councillor_name") or "Ward Office"),
+        leader_role=(selected_user.role if selected_user else "COUNCILLOR"),
+        leader_department=(selected_user.department if selected_user else "Municipal Governance"),
+        leader_phone=(selected_user.phone if selected_user else ward_kb.get("councillor_phone")),
+        leader_email=(selected_user.email if selected_user else None),
+        office_hours="Mon-Sat, 10:00 AM - 5:00 PM",
+        key_focus=ward_kb.get("common_issues", []),
+        total_complaints_30d=total_30d,
+        resolved_complaints_30d=resolved_30d,
+        pending_complaints_30d=pending_30d,
+        resolution_rate_30d=round((resolved_30d / total_30d) * 100, 1) if total_30d else 0.0,
+        ward_trust_score=(float(trust_latest.final_trust_score) if trust_latest and trust_latest.final_trust_score is not None else None),
+    )
 
 
 @router.post("/complaint", response_model=ComplaintOut, status_code=201)

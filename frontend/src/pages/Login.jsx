@@ -11,6 +11,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -61,15 +62,23 @@ export default function Login() {
         setConfirmPassword('');
         setMode('login');
       } else if (mode === 'register') {
+        const trimmedPhone = phone.trim();
+        if (registerRole === 'CITIZEN' && !trimmedPhone) {
+          setError(t('login_err_phone_required', 'Phone number is required for citizen accounts.'));
+          setLoading(false);
+          return;
+        }
+
         await register({
           name: name.trim(),
           email: email.trim(),
           password,
           role: registerRole,
+          phone: trimmedPhone || null,
         });
         setSuccess(t('login_success_account_created', 'Account created successfully. Signing you in...'));
         const profile = await login(email.trim(), password);
-        navigate(profile.role === 'CITIZEN' ? '/register-complaint' : '/dashboard');
+        navigate('/dashboard');
       } else {
         const profile = await login(email.trim(), password);
         const resolvedName = profile?.name || t('login_user_fallback', 'User');
@@ -78,7 +87,7 @@ export default function Login() {
         setSuccess(`${t('login_success_welcome_prefix', 'Welcome back')}, ${resolvedName}!`);
         await new Promise((resolve) => setTimeout(resolve, 1700));
         setShowWelcomeOverlay(false);
-        navigate(profile.role === 'CITIZEN' ? '/register-complaint' : '/dashboard');
+        navigate('/dashboard');
       }
     } catch (err) {
       const fallback =
@@ -292,6 +301,24 @@ export default function Login() {
                   <option value="LEADER">{t('login_role_leader', 'Leader')}</option>
                   <option value="WORKER">{t('login_role_worker', 'Worker')}</option>
                 </select>
+              </div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('login_phone', 'Phone number')}</label>
+                <div className="relative">
+                  <FiUser className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    required={registerRole === 'CITIZEN'}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                    placeholder={t('login_phone_placeholder', '+91 98765 43210')}
+                    autoComplete="tel"
+                  />
+                </div>
               </div>
             )}
 

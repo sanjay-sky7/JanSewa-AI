@@ -106,6 +106,7 @@ Note:
 - Open the app UI at http://localhost:3000.
 - http://localhost:8000 is the backend API server (JSON responses).
 - API root is available at http://localhost:8000/ and health check at http://localhost:8000/api/health.
+- Citizens now receive SMS/WhatsApp confirmation when a complaint is registered if MSG91 variables are configured.
 
 Data persistence across different machines:
 - By default, Docker uses the local `postgres_data` volume on each machine, so users/complaints created on Machine A do not automatically appear on Machine B.
@@ -167,10 +168,11 @@ npm run dev
 | `GOOGLE_MAPS_API_KEY` | Google Maps geocoding | ❌ Optional — KB has ward GPS |
 | `REDIS_URL` | Redis connection string | ❌ Optional |
 | `CLOUDINARY_URL` | Cloudinary image uploads | ❌ Optional |
-| `TWILIO_ACCOUNT_SID` | Twilio SMS (if enabled) | ❌ Optional |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token | ❌ Optional |
-| `TWILIO_SMS_FROM` | Twilio SMS sender number (E.164) | ❌ Optional |
-| `TWILIO_WHATSAPP_FROM` | Twilio WhatsApp sender number | ❌ Optional |
+| `MSG91_AUTH_KEY` | MSG91 auth key for SMS/WhatsApp APIs | ❌ Optional |
+| `MSG91_SMS_FLOW_ID` | MSG91 flow id for complaint SMS updates | ❌ Optional |
+| `MSG91_SMS_SENDER` | MSG91 sender id for SMS flows | ❌ Optional |
+| `MSG91_WHATSAPP_FLOW_ID` | MSG91 flow id for WhatsApp updates | ❌ Optional |
+| `MSG91_WHATSAPP_NUMBER` | MSG91 integrated WhatsApp number | ❌ Optional |
 | `SMTP_HOST` | SMTP host for email notifications | ❌ Optional |
 | `SMTP_PORT` | SMTP port (default `587`) | ❌ Optional |
 | `SMTP_USERNAME` | SMTP username | ❌ Optional |
@@ -179,7 +181,17 @@ npm run dev
 
 > **Zero API keys needed** to run the full platform. The Knowledge Base provides complaint classification, priority scoring, communications, and social analysis offline.
 
-For complaint confirmations over SMS/WhatsApp, set all four Twilio variables (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM`, `TWILIO_WHATSAPP_FROM`). If these are placeholders or missing, complaint registration still works but external message delivery is skipped.
+For complaint confirmations over SMS/WhatsApp, set MSG91 variables (`MSG91_AUTH_KEY`, `MSG91_SMS_FLOW_ID`, `MSG91_WHATSAPP_FLOW_ID`, and optionally `MSG91_SMS_SENDER` / `MSG91_WHATSAPP_NUMBER`). If these are placeholders or missing, complaint registration still works but external message delivery is skipped.
+
+WhatsApp complaint bot (MSG91 webhook):
+- Endpoint: `POST /api/whatsapp/webhook`
+- Configure this URL in MSG91 incoming webhook settings.
+- Supported citizen commands:
+    - `REGISTER <complaint text>`
+    - `REGISTER Ward 12 no water supply for 2 days`
+    - `STATUS` (shows last complaints)
+    - `STATUS <complaint_id>`
+    - `HELP`
 
 ---
 
@@ -285,12 +297,15 @@ jansewa-ai/
 |--------|----------|-------------|------|
 | POST | `/api/complaints` | Create complaint (runs AI pipeline: NLP + priority scoring) | No |
 | GET | `/api/complaints` | List complaints (paginated, filter by status/ward/category/priority/search) | No |
+| GET | `/api/complaints/mine` | List complaints owned by current citizen account | Yes |
+| GET | `/api/complaints/assigned/me` | Worker/Ops queue: complaints assigned to current user | Yes |
 | GET | `/api/complaints/citizen/notifications` | Citizen notification feed for status/assignment updates | Yes |
 | POST | `/api/complaints/citizen/notifications/mark-seen` | Mark citizen notifications as seen | Yes |
 | GET | `/api/complaints/priority-queue` | Priority-sorted active complaints | No |
 | GET | `/api/complaints/stats` | Complaint statistics (open, critical, resolved) | No |
 | GET | `/api/complaints/ward/{ward_id}` | Complaints by ward | No |
 | GET | `/api/complaints/{complaint_id}` | Single complaint detail | No |
+| GET | `/api/complaints/{complaint_id}/assignment-recommendations` | Same-ward + category-specialized worker suggestions | Yes |
 | GET | `/api/complaints/{complaint_id}/feedback` | Latest leader feedback for complaint | Yes |
 | PUT | `/api/complaints/{complaint_id}/assign` | Assign complaint to worker | Yes |
 | PUT | `/api/complaints/{complaint_id}/status` | Update complaint status | Yes |
@@ -320,6 +335,12 @@ jansewa-ai/
 | GET | `/api/communications` | List communications | No |
 | PUT | `/api/communications/{id}/approve` | Approve a communication | Yes |
 | POST | `/api/communications/{id}/publish` | Publish a communication | Yes |
+
+### WhatsApp Bot (`/api/whatsapp`)
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/whatsapp/webhook` | Citizen WhatsApp commands: REGISTER / STATUS / HELP | No |
 
 ### Dashboard (`/api/dashboard`)
 
@@ -394,18 +415,55 @@ The platform includes a **complete self-contained intelligence layer** (8 module
 
 All demo accounts use password: **`password123`**
 
-| Role | Email | Access Level |
-|------|-------|-------------|
-| **Leader** | sunita@jansewa.gov | Full dashboard, approve verifications/comms |
-| **Leader** | vijay@jansewa.gov | Full dashboard, approve verifications/comms |
-| **Department Head** | anita@jansewa.gov | Department-level complaint management |
-| **Department Head** | rakesh@jansewa.gov | Department-level complaint management |
-| **Department Head** | meena@jansewa.gov | Department-level complaint management |
-| **Worker** | suresh@jansewa.gov | Complaint assignment, submit verifications |
-| **Worker** | kavita@jansewa.gov | Complaint assignment, submit verifications |
-| **Worker** | dinesh@jansewa.gov | Complaint assignment, submit verifications |
-| **Worker** | pooja@jansewa.gov | Complaint assignment, submit verifications |
-| **Admin** | admin@jansewa.gov | Full system access |
+### Ward Leaders (15 wards, Indian names)
+
+| Ward | Leader Name | Leader Email | Role |
+|------|-------------|--------------|------|
+| 1 | Sunita Sharma | `leader.w01@jansewa.gov` | LEADER |
+| 2 | Rakesh Verma | `leader.w02@jansewa.gov` | LEADER |
+| 3 | Anita Yadav | `leader.w03@jansewa.gov` | LEADER |
+| 4 | Vikram Singh | `leader.w04@jansewa.gov` | LEADER |
+| 5 | Pooja Gupta | `leader.w05@jansewa.gov` | LEADER |
+| 6 | Rajesh Kumar | `leader.w06@jansewa.gov` | LEADER |
+| 7 | Meena Joshi | `leader.w07@jansewa.gov` | LEADER |
+| 8 | Amit Tiwari | `leader.w08@jansewa.gov` | LEADER |
+| 9 | Kavita Mishra | `leader.w09@jansewa.gov` | LEADER |
+| 10 | Sanjay Chauhan | `leader.w10@jansewa.gov` | LEADER |
+| 11 | Neha Patel | `leader.w11@jansewa.gov` | LEADER |
+| 12 | Deepak Sharma | `leader.w12@jansewa.gov` | LEADER |
+| 13 | Lata Srivastava | `leader.w13@jansewa.gov` | LEADER |
+| 14 | Rohit Agarwal | `leader.w14@jansewa.gov` | LEADER |
+| 15 | Priyanka Dubey | `leader.w15@jansewa.gov` | LEADER |
+
+### Ward Worker Specialists (7 per ward, 105 total)
+
+Every ward gets category-specific workers using this pattern:
+
+| Category specialization | Department | Email pattern (for ward `NN`) |
+|-------------------------|------------|-------------------------------|
+| Water specialist | Water Department | `wNN.water@jansewa.gov` |
+| Road specialist | Roads Department | `wNN.road@jansewa.gov` |
+| Electricity specialist | Electricity Department | `wNN.electricity@jansewa.gov` |
+| Drainage specialist | Drainage Department | `wNN.drainage@jansewa.gov` |
+| Sanitation specialist | Sanitation Department | `wNN.garbage@jansewa.gov` |
+| Health specialist | Health Department | `wNN.health@jansewa.gov` |
+| Public safety specialist | Safety Department | `wNN.safety@jansewa.gov` |
+
+Examples with names (Indian names are seeded):
+- Ward 1 workers: Arjun/Yadav style names with emails `w01.water@jansewa.gov`, `w01.road@jansewa.gov`, `w01.electricity@jansewa.gov`, `w01.drainage@jansewa.gov`, `w01.garbage@jansewa.gov`, `w01.health@jansewa.gov`, `w01.safety@jansewa.gov`
+- Ward 12 workers: similarly named Indian workers with emails `w12.water@jansewa.gov`, `w12.road@jansewa.gov`, `w12.electricity@jansewa.gov`, `w12.drainage@jansewa.gov`, `w12.garbage@jansewa.gov`, `w12.health@jansewa.gov`, `w12.safety@jansewa.gov`
+
+### Cross-Ward Operations Accounts
+
+| Role | Email |
+|------|-------|
+| Worker (Sunny Kumar) | `sunny.worker@jansewa.gov` |
+| Department Head (Water) | `dh.water@jansewa.gov` |
+| Department Head (Roads) | `dh.roads@jansewa.gov` |
+| Department Head (Health) | `dh.health@jansewa.gov` |
+| Officer | `officer.publicworks@jansewa.gov` |
+| Engineer | `engineer.roads@jansewa.gov` |
+| Admin | `admin@jansewa.gov` |
 
 > Run `python -m seed_data` to populate the database with demo data.
 

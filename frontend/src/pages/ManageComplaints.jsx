@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { complaintsAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_OPTIONS = [
   'OPEN',
@@ -14,8 +15,15 @@ const STATUS_OPTIONS = [
   'CLOSED',
 ];
 
+const WORKER_STATUS_OPTIONS = [
+  { value: 'UNDER_REVIEW', label: 'Under Review' },
+  { value: 'IN_PROGRESS', label: 'Working on it' },
+  { value: 'VERIFICATION_PENDING', label: 'Completed' },
+];
+
 export default function ManageComplaints() {
   const { t } = useLanguage();
+  const { hasRole } = useAuth();
   const [searchParams] = useSearchParams();
   const [complaints, setComplaints] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
@@ -25,6 +33,7 @@ export default function ManageComplaints() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState(null);
+  const isWorkerView = hasRole('WORKER', 'OFFICER', 'ENGINEER');
 
   const BUCKETS = {
     total: [],
@@ -78,11 +87,12 @@ export default function ManageComplaints() {
       const allItems = [];
 
       do {
-        const { data } = await complaintsAPI.list({
+        const loader = isWorkerView ? complaintsAPI.myAssigned : complaintsAPI.list;
+        const { data } = await loader({
           page,
           per_page: perPage,
           ...(statusFilter ? { status: statusFilter } : {}),
-          ...(priorityFilter ? { priority_level: priorityFilter } : {}),
+          ...(!isWorkerView && priorityFilter ? { priority_level: priorityFilter } : {}),
         });
 
         const items = data?.items || [];
@@ -101,7 +111,7 @@ export default function ManageComplaints() {
 
   useEffect(() => {
     loadComplaints();
-  }, [statusFilter, priorityFilter]);
+  }, [statusFilter, priorityFilter, isWorkerView]);
 
   const visibleComplaints = useMemo(() => {
     let result = complaints;
@@ -140,7 +150,11 @@ export default function ManageComplaints() {
     }
   }
 
-  const statusLabel = (status) => t(`status_${status.toLowerCase()}`, status.replaceAll('_', ' '));
+  const statusLabel = (status) => {
+    if (isWorkerView && status === 'IN_PROGRESS') return 'Working on it';
+    if (isWorkerView && status === 'VERIFICATION_PENDING') return 'Completed';
+    return t(`status_${status.toLowerCase()}`, status.replaceAll('_', ' '));
+  };
 
   return (
     <div className="space-y-6">
@@ -152,7 +166,9 @@ export default function ManageComplaints() {
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-100">Operations</p>
           <h1 className="text-2xl font-bold text-white">{t('manage_title', 'Manage Complaints')}</h1>
           <p className="mt-1 text-sm text-slate-100">
-            {t('manage_subtitle', 'Review all complaints and update lifecycle status from one place.')}
+            {isWorkerView
+              ? 'Worker Manage Complaints: view complaints assigned to you and update progress.'
+              : t('manage_subtitle', 'Review all complaints and update lifecycle status from one place.')}
           </p>
         </div>
 
@@ -224,7 +240,15 @@ export default function ManageComplaints() {
                   <tr key={c.id} className="complaint-slide-item hover:bg-slate-50/70 transition-colors" style={{ animationDelay: `${idx * 45}ms` }}>
                     <td className="px-4 py-3">
                       <div className="max-w-md">
-                        <p className="line-clamp-2 text-gray-900">{c.raw_text || t('manage_no_text', 'No text summary available')}</p>
+                        {c.is_new_for_user && (
+                          <span className="new-complaint-chip">
+                            ★ NEW
+                          </span>
+                        )}
+                        {c.complaint_code && (
+                          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{c.complaint_code}</p>
+                        )}
+                        <p className="line-clamp-2 text-gray-900">{c.raw_text || (c.input_type === 'voice' ? 'Voice file uploaded. Transcription pending.' : t('manage_no_text', 'No text summary available'))}</p>
                         <Link to={`/complaints/${c.id}`} className="mt-1 inline-block text-xs font-semibold text-primary-700 hover:underline">
                           {t('manage_open_details', 'Open details')}
                         </Link>
@@ -236,13 +260,13 @@ export default function ManageComplaints() {
                     <td className="px-4 py-3 font-semibold text-gray-800">{statusLabel(c.status)}</td>
                     <td className="px-4 py-3">
                       <select
-                        value={c.status}
+                        value={isWorkerView ? (WORKER_STATUS_OPTIONS.some((s) => s.value === c.status) ? c.status : 'UNDER_REVIEW') : c.status}
                         disabled={savingId === c.id}
                         onChange={(e) => updateStatus(c.id, e.target.value)}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
                       >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>{statusLabel(status)}</option>
+                        {(isWorkerView ? WORKER_STATUS_OPTIONS : STATUS_OPTIONS.map((status) => ({ value: status, label: statusLabel(status) }))).map((statusOption) => (
+                          <option key={statusOption.value} value={statusOption.value}>{statusOption.label}</option>
                         ))}
                       </select>
                     </td>

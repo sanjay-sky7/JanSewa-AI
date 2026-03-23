@@ -21,6 +21,7 @@ const TRANSLATIONS = {
     side_register_complaint: 'Register Complaint',
     side_my_complaints: 'My Complaints',
     side_dashboard: 'Dashboard',
+    side_know_your_leader: 'Know Your Leader',
     side_manage_complaints: 'Manage Complaints',
     side_social_media: 'Social Media',
     side_communications: 'Communications',
@@ -156,6 +157,7 @@ const TRANSLATIONS = {
     queue_ward_na: 'Ward N/A',
     queue_category_na: 'Category N/A',
     queue_score: 'Score',
+    queue_updated_by: 'Updated by',
     queue_complaint_fallback: 'Complaint',
 
     alerts_none: 'No active alerts',
@@ -397,6 +399,7 @@ const TRANSLATIONS = {
     side_register_complaint: 'शिकायत दर्ज करें',
     side_my_complaints: 'मेरी शिकायतें',
     side_dashboard: 'डैशबोर्ड',
+    side_know_your_leader: 'अपने लीडर को जानें',
     side_manage_complaints: 'शिकायत प्रबंधन',
     side_social_media: 'सोशल मीडिया',
     side_communications: 'संचार',
@@ -532,6 +535,7 @@ const TRANSLATIONS = {
     queue_ward_na: 'वार्ड उपलब्ध नहीं',
     queue_category_na: 'श्रेणी उपलब्ध नहीं',
     queue_score: 'स्कोर',
+    queue_updated_by: 'अपडेट किया',
     queue_complaint_fallback: 'शिकायत',
 
     alerts_none: 'कोई सक्रिय अलर्ट नहीं',

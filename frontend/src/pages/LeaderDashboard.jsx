@@ -9,6 +9,16 @@ import AlertsPanel from '../components/Dashboard/AlertsPanel';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import { useLanguage } from '../context/LanguageContext';
 
+const WORKER_VISIBLE_STATUS_LABELS = {
+  IN_PROGRESS: 'Working on it',
+  VERIFICATION_PENDING: 'Completed',
+};
+
+function formatLeaderStatus(status, t) {
+  if (!status) return t('common_na', 'N/A');
+  return WORKER_VISIBLE_STATUS_LABELS[status] || t(`status_${status.toLowerCase()}`, status.replaceAll('_', ' '));
+}
+
 export default function LeaderDashboard() {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -166,6 +176,7 @@ export default function LeaderDashboard() {
                 >
                   <span className="complaint-chip-priority">{item.priority_level || 'LOW'}</span>
                   <span className="complaint-chip-text">{item.ai_summary || item.raw_text || t('queue_complaint_fallback', 'Complaint')}</span>
+                  <span className="complaint-chip-status">{formatLeaderStatus(item.status, t)}</span>
                 </button>
               ))}
             </div>

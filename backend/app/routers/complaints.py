@@ -1,5 +1,6 @@
 """Complaints router — full CRUD + AI pipeline."""
 
+import asyncio
 import uuid
 import logging
 import json
@@ -39,8 +40,9 @@ from app.schemas.complaint import (
     AssignmentRecommendationItem,
 )
 from app.utils.helpers import get_current_user, get_current_user_optional
-from app.services.notification_service import send_sms, send_whatsapp, send_email
+from app.services.notification_service import send_sms, send_whatsapp
 from app.knowledge_base.workforce_assignment import recommend_assignees
+from app.utils.exif_reader import extract_exif_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -266,16 +268,6 @@ async def _resolve_created_complaint_ids_by_user(db: AsyncSession, user_id: Opti
     return [row[0] for row in created_result.all() if row[0] is not None]
 
 
-async def _resolve_user_email_by_phone(db: AsyncSession, phone: Optional[str]) -> Optional[str]:
-    if not phone:
-        return None
-    users_result = await db.execute(select(User.email, User.phone).where(User.phone.isnot(None)))
-    for email, user_phone in users_result.all():
-        if email and _phone_matches(user_phone, phone):
-            return email
-    return None
-
-
 def _build_complaint_context(complaint: Complaint) -> dict:
     category_name = complaint.category.name if complaint.category else "General"
     ward_number = complaint.ward.ward_number if complaint.ward else None
@@ -294,7 +286,6 @@ def _build_complaint_context(complaint: Complaint) -> dict:
 
 
 async def _dispatch_external_notifications(
-    db: AsyncSession,
     complaint: Complaint,
     status: str,
     feedback_note: Optional[str],
@@ -325,17 +316,11 @@ async def _dispatch_external_notifications(
                 sms_sent,
                 wa_sent,
             )
-
-        email = await _resolve_user_email_by_phone(db, citizen.phone)
-        if email:
-            subject = f"Jansewa Complaint Update - {status.replace('_', ' ')}"
-            body = f"{message}\n\nComplaint summary: {context['summary']}"
-            send_email(email, subject, body)
     except Exception as exc:
         logger.warning("External notification dispatch failed: %s", exc)
 
 
-async def _dispatch_registration_confirmation(db: AsyncSession, complaint: Complaint):
+async def _dispatch_registration_confirmation(complaint: Complaint):
     citizen = complaint.citizen
     if not citizen or not citizen.phone:
         return
@@ -360,22 +345,141 @@ async def _dispatch_registration_confirmation(db: AsyncSession, complaint: Compl
                 sms_sent,
                 wa_sent,
             )
-
-        email = await _resolve_user_email_by_phone(db, citizen.phone)
-        if email:
-            subject = "Jansewa Complaint Registration Confirmation"
-            body = (
-                f"Your complaint has been registered successfully.\n\n"
-                f"Complaint ID: {complaint.id}\n"
-                f"Status: {status}\n"
-                f"Category: {context['category_name']}\n"
-                f"Ward: {context['ward_label']}\n"
-                f"Registered At: {created_label}\n"
-                f"Summary: {context['summary']}\n"
-            )
-            send_email(email, subject, body)
     except Exception as exc:
         logger.warning("Registration confirmation dispatch failed: %s", exc)
+
+
+def _queue_notification(coro, purpose: str):
+    async def _runner():
+        try:
+            await coro
+        except Exception as exc:
+            logger.warning("Queued notification failed for %s: %s", purpose, exc)
+
+    asyncio.create_task(_runner())
+
+
+def _category_code(name: Optional[str]) -> str:
+    if not name:
+        return "GEN"
+    letters = "".join(ch for ch in name.upper() if ch.isalpha())
+    return (letters[:3] or "GEN").ljust(3, "X")
+
+
+def _source_code(input_type: Optional[str]) -> str:
+    mapping = {
+        "text": "TXT",
+        "voice": "VOC",
+        "image": "IMG",
+        "social": "SOC",
+    }
+    return mapping.get((input_type or "").lower(), "GEN")
+
+
+async def _generate_complaint_code(
+    db: AsyncSession,
+    complaint: Complaint,
+) -> str:
+    now = datetime.utcnow()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_tag = now.strftime("%Y%m%d")
+
+    category_name = None
+    if complaint.category_id:
+        category_obj = await db.get(Category, complaint.category_id)
+        category_name = category_obj.name if category_obj else None
+
+    src = _source_code(complaint.input_type)
+    cat = _category_code(category_name)
+    ward_number = 0
+    if complaint.ward_id:
+        ward_obj = await db.get(Ward, complaint.ward_id)
+        if ward_obj and ward_obj.ward_number is not None:
+            ward_number = int(ward_obj.ward_number)
+    ward = f"W{ward_number:02d}"
+    prefix = f"JSA-{src}-{cat}-{ward}-{day_tag}"
+
+    like_prefix = f"{prefix}-%"
+    count_today = (await db.execute(
+        select(func.count()).select_from(Complaint).where(
+            Complaint.complaint_code.like(like_prefix),
+            Complaint.created_at >= day_start,
+        )
+    )).scalar() or 0
+    seq = int(count_today) + 1
+    return f"{prefix}-{seq:04d}"
+
+
+def _parse_exif_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+async def _extract_image_exif_data_url(raw_image_url: str) -> dict:
+    if not raw_image_url or not raw_image_url.startswith("data:image") or "," not in raw_image_url:
+        return {}
+
+    header, encoded = raw_image_url.split(",", 1)
+    mime = "image/jpeg"
+    if ";" in header and "/" in header:
+        mime = header.split(";", 1)[0].replace("data:", "")
+
+    suffix = ".jpg"
+    if "png" in mime:
+        suffix = ".png"
+    elif "webp" in mime:
+        suffix = ".webp"
+
+    temp_path = None
+    try:
+        image_bytes = base64.b64decode(encoded, validate=False)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(image_bytes)
+            temp_path = temp_file.name
+
+        exif = extract_exif_data(temp_path)
+        return {
+            "latitude": exif.get("gps_latitude"),
+            "longitude": exif.get("gps_longitude"),
+            "captured_at": _parse_exif_datetime(exif.get("datetime")),
+        }
+    except Exception:
+        return {}
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+
+async def _compute_unseen_complaint_ids(
+    db: AsyncSession,
+    user,
+    complaint_ids: list[uuid.UUID],
+) -> set[uuid.UUID]:
+    if not user or not complaint_ids:
+        return set()
+
+    role = getattr(user, "role", None)
+    roles_with_unseen = {"LEADER", "DEPARTMENT_HEAD", "ADMIN", "WORKER", "OFFICER", "ENGINEER"}
+    if role not in roles_with_unseen:
+        return set()
+
+    viewed_rows = await db.execute(
+        select(AuditLog.entity_id).where(
+            AuditLog.entity_type == "complaint",
+            AuditLog.action == "VIEWED",
+            AuditLog.performed_by == user.id,
+            AuditLog.entity_id.in_(complaint_ids),
+        )
+    )
+    viewed = {row[0] for row in viewed_rows.all() if row[0] is not None}
+    return {cid for cid in complaint_ids if cid not in viewed}
 
 
 async def _process_complaint(complaint: Complaint, db: AsyncSession):
@@ -391,6 +495,7 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
         ai_data = await extract_complaint_details(
             complaint.raw_text,
             complaint.source_language or "auto",
+            allow_external_enhancement=False,
         )
 
         complaint.ai_summary = ai_data.get("summary_english", "")
@@ -442,12 +547,11 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
                 cat_name = selected_category.name
         else:
             cat_name = ai_data.get("category", "Other")
-            cat_result = await db.execute(
-                select(Category).where(Category.name == cat_name)
-            )
-            cat = cat_result.scalar_one_or_none()
-            if cat:
-                complaint.category_id = cat.id
+            mapped_category_id = await _resolve_category_id_by_name(db, cat_name)
+            if mapped_category_id is None:
+                mapped_category_id = await _resolve_category_id_by_name(db, "Other")
+                cat_name = "Other"
+            complaint.category_id = mapped_category_id
 
         # Step 2: Priority scoring
         priority = await calculate_priority_score(
@@ -526,10 +630,22 @@ async def create_complaint(
         if not resolved_raw_text:
             resolved_raw_text = (image_ai.get("official_summary") or image_ai.get("issue_description") or "").strip() or None
 
+    resolved_geo_lat = body.geo_latitude
+    resolved_geo_lng = body.geo_longitude
+    exif_captured_at = None
+
+    if body.input_type == "image" and body.raw_image_url:
+        exif_payload = await _extract_image_exif_data_url(body.raw_image_url)
+        if resolved_geo_lat is None and exif_payload.get("latitude") is not None:
+            resolved_geo_lat = exif_payload.get("latitude")
+        if resolved_geo_lng is None and exif_payload.get("longitude") is not None:
+            resolved_geo_lng = exif_payload.get("longitude")
+        exif_captured_at = exif_payload.get("captured_at")
+
     # KB-assisted geo mapping from uploaded image metadata
     geo_ward = None
-    if body.geo_latitude is not None and body.geo_longitude is not None:
-        geo_ward = get_nearest_ward(body.geo_latitude, body.geo_longitude)
+    if resolved_geo_lat is not None and resolved_geo_lng is not None:
+        geo_ward = get_nearest_ward(resolved_geo_lat, resolved_geo_lng)
         if geo_ward and resolved_ward_id is None:
             ward_by_number = await db.execute(select(Ward).where(Ward.ward_number == geo_ward["id"]))
             ward_obj = ward_by_number.scalar_one_or_none()
@@ -558,6 +674,7 @@ async def create_complaint(
 
     complaint = Complaint(
         citizen_id=citizen.id if citizen else None,
+        created_by=getattr(user, "id", None),
         category_id=resolved_category_id,
         raw_text=resolved_raw_text,
         raw_audio_url=body.raw_audio_url,
@@ -567,18 +684,21 @@ async def create_complaint(
         ward_id=resolved_ward_id,
         status="OPEN",
     )
-    if body.geo_latitude is not None:
-        complaint.ai_latitude = body.geo_latitude
-    if body.geo_longitude is not None:
-        complaint.ai_longitude = body.geo_longitude
+    if resolved_geo_lat is not None:
+        complaint.ai_latitude = resolved_geo_lat
+    if resolved_geo_lng is not None:
+        complaint.ai_longitude = resolved_geo_lng
     if geo_ward:
         complaint.ai_location = f"Geo-tagged near {geo_ward['name']}"
+    if exif_captured_at and not complaint.ai_location:
+        complaint.ai_location = f"Image captured at {exif_captured_at.strftime('%d-%b-%Y %H:%M')}"
 
     db.add(complaint)
     await db.flush()
 
     # Run AI pipeline
     await _process_complaint(complaint, db)
+    complaint.complaint_code = await _generate_complaint_code(db, complaint)
     await db.flush()
 
     # Audit log
@@ -597,7 +717,10 @@ async def create_complaint(
     )
     created_complaint = result.scalar_one()
 
-    await _dispatch_registration_confirmation(db, created_complaint)
+    _queue_notification(
+        _dispatch_registration_confirmation(created_complaint),
+        f"registration confirmation for complaint {created_complaint.id}",
+    )
 
     return ComplaintOut.model_validate(created_complaint)
 
@@ -613,6 +736,7 @@ async def list_complaints(
     citizen_phone: Optional[str] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user_optional),
 ):
     stmt = _complaint_query()
 
@@ -642,12 +766,15 @@ async def list_complaints(
 
     # Paginate
     stmt = (
-        stmt.order_by(desc(Complaint.created_at))
+        stmt.order_by(desc(func.coalesce(Complaint.assigned_at, Complaint.created_at)))
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
     result = await db.execute(stmt)
     items = [ComplaintOut.model_validate(c) for c in result.scalars().all()]
+    unseen_ids = await _compute_unseen_complaint_ids(db, user, [item.id for item in items])
+    for item in items:
+        item.is_new_for_user = item.id in unseen_ids
 
     return ComplaintListOut(items=items, total=total, page=page, per_page=per_page)
 
@@ -672,6 +799,8 @@ async def list_my_complaints(
         ownership_filters.append(Complaint.citizen_id.in_(citizen_ids))
     if created_ids:
         ownership_filters.append(Complaint.id.in_(created_ids))
+    if getattr(user, "id", None):
+        ownership_filters.append(Complaint.created_by == user.id)
 
     stmt = _complaint_query().where(or_(*ownership_filters))
 
@@ -813,14 +942,69 @@ async def complaints_by_ward(
     return ComplaintListOut(items=items, total=total, page=page, per_page=per_page)
 
 
+@router.get("/assigned/me", response_model=ComplaintListOut)
+async def list_my_assigned_complaints(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    if getattr(user, "role", None) not in ("WORKER", "OFFICER", "ENGINEER", "DEPARTMENT_HEAD"):
+        raise HTTPException(status_code=403, detail="Only field teams can access assigned complaints")
+
+    stmt = _complaint_query().where(Complaint.assigned_to == user.id)
+    if status:
+        stmt = stmt.where(Complaint.status == status)
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = (
+        stmt.order_by(desc(Complaint.created_at))
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    result = await db.execute(stmt)
+    items = [ComplaintOut.model_validate(c) for c in result.scalars().all()]
+    unseen_ids = await _compute_unseen_complaint_ids(db, user, [item.id for item in items])
+    for item in items:
+        item.is_new_for_user = item.id in unseen_ids
+
+    return ComplaintListOut(items=items, total=total, page=page, per_page=per_page)
+
+
 @router.get("/{complaint_id}", response_model=ComplaintOut)
-async def get_complaint(complaint_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_complaint(
+    complaint_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user_optional),
+):
     result = await db.execute(
         _complaint_query().where(Complaint.id == complaint_id)
     )
     complaint = result.scalar_one_or_none()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
+
+    if user and getattr(user, "role", None) in {"LEADER", "DEPARTMENT_HEAD", "ADMIN", "WORKER", "OFFICER", "ENGINEER"}:
+        view_exists = await db.execute(
+            select(AuditLog.id).where(
+                AuditLog.entity_type == "complaint",
+                AuditLog.entity_id == complaint.id,
+                AuditLog.action == "VIEWED",
+                AuditLog.performed_by == user.id,
+            ).limit(1)
+        )
+        if view_exists.scalar_one_or_none() is None:
+            db.add(AuditLog(
+                entity_type="complaint",
+                entity_id=complaint.id,
+                action="VIEWED",
+                new_value=json.dumps({"status": complaint.status}),
+                performed_by=user.id,
+            ))
+
     return ComplaintOut.model_validate(complaint)
 
 
@@ -852,6 +1036,9 @@ async def assign_complaint(
             detail="Assignee must be WORKER, OFFICER, ENGINEER, or DEPARTMENT_HEAD",
         )
 
+    if complaint.ward_id and assignee.ward_id and complaint.ward_id != assignee.ward_id:
+        raise HTTPException(status_code=400, detail="Assignee must belong to the same ward as complaint")
+
     old_status = complaint.status
     complaint.assigned_to = body.assigned_to
     complaint.assigned_at = datetime.utcnow()
@@ -869,12 +1056,14 @@ async def assign_complaint(
         performed_by=user.id,
     ))
 
-    await _dispatch_external_notifications(
-        db=db,
+    _queue_notification(
+        _dispatch_external_notifications(
         complaint=complaint,
         status="ASSIGNED",
         feedback_note=f"Assigned to {assignee.name} ({assignee.role})",
         actor_name=getattr(user, "name", None),
+        ),
+        f"assignment update for complaint {complaint.id}",
     )
 
     await db.flush()
@@ -901,13 +1090,24 @@ async def assignment_recommendations(
     users_result = await db.execute(
         select(User).where(User.role.in_(["WORKER", "OFFICER", "ENGINEER", "DEPARTMENT_HEAD"]))
     )
-    candidates = users_result.scalars().all()
+    all_candidates = users_result.scalars().all()
+
+    candidates = []
+    for candidate in all_candidates:
+        if complaint.ward_id and candidate.ward_id and candidate.ward_id != complaint.ward_id:
+            continue
+
+        candidates.append(candidate)
+
+    if not candidates:
+        candidates = all_candidates
 
     recommendations = recommend_assignees(complaint, candidates)
     recommendation_items = [
         AssignmentRecommendationItem(
             user_id=item["user_id"],
             name=item["name"],
+            email=item.get("email"),
             role=item["role"],
             department=item.get("department"),
             ward_id=item.get("ward_id"),
@@ -941,6 +1141,25 @@ async def update_status(
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
+    user_role = getattr(user, "role", None)
+    worker_roles = {"WORKER", "OFFICER", "ENGINEER"}
+    leader_roles = {"LEADER", "DEPARTMENT_HEAD", "ADMIN"}
+
+    if user_role in worker_roles:
+        if complaint.assigned_to != user.id:
+            raise HTTPException(status_code=403, detail="Workers can update only complaints assigned to them")
+
+        worker_allowed = {"UNDER_REVIEW", "IN_PROGRESS", "VERIFICATION_PENDING"}
+        if body.status not in worker_allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="Workers can set status only to UNDER_REVIEW, IN_PROGRESS, or VERIFICATION_PENDING",
+            )
+    elif user_role in leader_roles:
+        pass
+    else:
+        raise HTTPException(status_code=403, detail="Not allowed to update complaint status")
+
     old_status = complaint.status
     complaint.status = body.status
     complaint.updated_at = datetime.utcnow()
@@ -959,12 +1178,14 @@ async def update_status(
         performed_by=user.id,
     ))
 
-    await _dispatch_external_notifications(
-        db=db,
+    _queue_notification(
+        _dispatch_external_notifications(
         complaint=complaint,
         status=body.status,
         feedback_note=body.notes,
         actor_name=getattr(user, "name", None),
+        ),
+        f"status update for complaint {complaint.id}",
     )
 
     await db.flush()

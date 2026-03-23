@@ -577,6 +577,39 @@ body {
   text-overflow: ellipsis;
 }
 
+.complaint-chip-status {
+  border-radius: 9999px;
+  border: 1px solid #bae6fd;
+  background: #e0f2fe;
+  color: #075985;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.new-complaint-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+  border-radius: 9999px;
+  border: 1px solid #fbcfe8;
+  background: linear-gradient(90deg, #fdf2f8, #eef2ff);
+  color: #9d174d;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  animation: newBadgePulse 1.3s ease-in-out infinite;
+}
+
+@keyframes newBadgePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.25); }
+  50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(236, 72, 153, 0); }
+}
+
 [data-theme='dark'] .complaint-marquee-wrap {
   background: linear-gradient(90deg, rgba(8, 47, 73, 0.52), rgba(30, 58, 138, 0.48));
 }
@@ -593,6 +626,12 @@ body {
 [data-theme='dark'] .complaint-chip-priority {
   background: rgba(127, 29, 29, 0.35);
   color: #fecaca;
+}
+
+[data-theme='dark'] .complaint-chip-status {
+  border-color: rgba(125, 211, 252, 0.4);
+  background: rgba(7, 89, 133, 0.38);
+  color: #bae6fd;
 }
 
 @keyframes realtimePulse {

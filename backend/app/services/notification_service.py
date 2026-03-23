@@ -1,8 +1,7 @@
-"""Optional external push notification integrations."""
+"""Optional external notification integrations (MSG91 + SMTP)."""
 
 from __future__ import annotations
 
-import base64
 import logging
 import smtplib
 from email.message import EmailMessage
@@ -44,48 +43,94 @@ def _to_e164_india_default(phone: Optional[str]) -> Optional[str]:
 
 
 async def _twilio_send(to: str, body: str, from_number: str) -> bool:
-    if not _is_configured(settings.TWILIO_ACCOUNT_SID) or not _is_configured(settings.TWILIO_AUTH_TOKEN):
+    # Retained only for backward compatibility in internal call sites.
+    return False
+
+
+def _to_msg91_mobile(phone: Optional[str]) -> Optional[str]:
+    digits = _normalize_phone(phone)
+    if not digits:
+        return None
+    if len(digits) == 10:
+        return f"91{digits}"
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits
+    if len(digits) > 10:
+        return digits
+    return None
+
+
+async def _msg91_post(url: str, payload: dict) -> bool:
+    if not _is_configured(settings.MSG91_AUTH_KEY):
         return False
 
-    auth_raw = f"{settings.TWILIO_ACCOUNT_SID}:{settings.TWILIO_AUTH_TOKEN}".encode("utf-8")
-    auth = base64.b64encode(auth_raw).decode("utf-8")
-    url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.TWILIO_ACCOUNT_SID}/Messages.json"
-
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=12.0) as client:
             response = await client.post(
                 url,
-                data={"To": to, "From": from_number, "Body": body},
-                headers={"Authorization": f"Basic {auth}"},
+                json=payload,
+                headers={
+                    "authkey": settings.MSG91_AUTH_KEY,
+                    "Content-Type": "application/json",
+                },
             )
         if response.status_code >= 400:
-            logger.warning("Twilio send failed (%s): %s", response.status_code, response.text)
+            logger.warning("MSG91 send failed (%s): %s", response.status_code, response.text)
             return False
         return True
     except Exception as exc:
-        logger.warning("Twilio send failed with exception: %s", exc)
+        logger.warning("MSG91 send failed with exception: %s", exc)
         return False
 
 
 async def send_sms(phone: Optional[str], body: str) -> bool:
-    to = _to_e164_india_default(phone)
-    if not to or not _is_configured(settings.TWILIO_SMS_FROM):
+    mobile = _to_msg91_mobile(phone)
+    if not mobile:
         return False
-    return await _twilio_send(to=to, body=body, from_number=settings.TWILIO_SMS_FROM)
+    if not _is_configured(settings.MSG91_SMS_FLOW_ID):
+        return False
+
+    payload = {
+        "flow_id": settings.MSG91_SMS_FLOW_ID,
+        "mobiles": mobile,
+        "VAR1": body[:500],
+    }
+    if _is_configured(settings.MSG91_SMS_SENDER):
+        payload["sender"] = settings.MSG91_SMS_SENDER
+
+    return await _msg91_post("https://control.msg91.com/api/v5/flow/", payload)
 
 
 async def send_whatsapp(phone: Optional[str], body: str) -> bool:
-    to = _to_e164_india_default(phone)
-    from_number = settings.TWILIO_WHATSAPP_FROM
-    if not to or not _is_configured(from_number):
+    mobile = _to_msg91_mobile(phone)
+    if not mobile:
         return False
 
-    if not to.startswith("whatsapp:"):
-        to = f"whatsapp:{to}"
-    if not from_number.startswith("whatsapp:"):
-        from_number = f"whatsapp:{from_number}"
+    # Preferred path: MSG91 WhatsApp Flow.
+    if _is_configured(settings.MSG91_WHATSAPP_FLOW_ID):
+        wa_flow_payload = {
+            "flow_id": settings.MSG91_WHATSAPP_FLOW_ID,
+            "mobiles": mobile,
+            "VAR1": body[:500],
+        }
+        sent = await _msg91_post("https://control.msg91.com/api/v5/flow/", wa_flow_payload)
+        if sent:
+            return True
 
-    return await _twilio_send(to=to, body=body, from_number=from_number)
+    # Fallback path: direct WhatsApp outbound endpoint.
+    if _is_configured(settings.MSG91_WHATSAPP_NUMBER):
+        wa_direct_payload = {
+            "integrated_number": settings.MSG91_WHATSAPP_NUMBER,
+            "content_type": "text",
+            "payload": {
+                "type": "text",
+                "text": body[:1000],
+            },
+            "recipient": mobile,
+        }
+        return await _msg91_post(settings.MSG91_WHATSAPP_ENDPOINT, wa_direct_payload)
+
+    return False
 
 
 def send_email(to_email: Optional[str], subject: str, body: str) -> bool:

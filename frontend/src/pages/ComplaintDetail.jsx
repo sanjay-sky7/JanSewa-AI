@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 const priorityBadge = {
   CRITICAL: 'badge-critical',
   HIGH: 'badge-high',
@@ -35,7 +37,7 @@ const UPDATE_STATUSES = [
 
 export default function ComplaintDetail() {
   const { id } = useParams();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
   const { t } = useLanguage();
   const [complaint, setComplaint] = useState(null);
   const [verification, setVerification] = useState(null);
@@ -45,6 +47,21 @@ export default function ComplaintDetail() {
   const [newStatus, setNewStatus] = useState('');
   const [statusError, setStatusError] = useState('');
   const [statusSuccess, setStatusSuccess] = useState('');
+  const [recommendations, setRecommendations] = useState([]);
+  const [selectedAssignee, setSelectedAssignee] = useState('');
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignError, setAssignError] = useState('');
+  const [assignSuccess, setAssignSuccess] = useState('');
+  const [beforeFile, setBeforeFile] = useState(null);
+  const [afterFile, setAfterFile] = useState(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState('');
+  const [evidenceSuccess, setEvidenceSuccess] = useState('');
+
+  const isWorkerRole = hasRole('WORKER', 'OFFICER', 'ENGINEER');
+  const canSubmitWorkerEvidence = Boolean(
+    isWorkerRole && complaint?.assignee?.id && user?.id && complaint.assignee.id === user.id
+  );
 
   useEffect(() => {
     async function load() {
@@ -63,6 +80,45 @@ export default function ComplaintDetail() {
     }
     load();
   }, [id]);
+
+  useEffect(() => {
+    async function loadRecommendations() {
+      if (!hasRole('LEADER', 'DEPARTMENT_HEAD', 'ADMIN')) {
+        setRecommendations([]);
+        return;
+      }
+      try {
+        const { data } = await complaintsAPI.assignmentRecommendations(id);
+        setRecommendations(data?.candidates || []);
+      } catch {
+        setRecommendations([]);
+      }
+    }
+    loadRecommendations();
+  }, [id, hasRole]);
+
+  const handleAssign = async () => {
+    if (!selectedAssignee) return;
+    setAssignError('');
+    setAssignSuccess('');
+    setAssignLoading(true);
+    try {
+      const selectedWorker = recommendations.find((item) => item.user_id === selectedAssignee);
+      await complaintsAPI.assign(id, { assigned_to: selectedAssignee });
+      const [{ data: updatedComplaint }, recommendationsRes] = await Promise.all([
+        complaintsAPI.get(id),
+        complaintsAPI.assignmentRecommendations(id).catch(() => ({ data: { candidates: [] } })),
+      ]);
+      setComplaint(updatedComplaint);
+      setRecommendations(recommendationsRes?.data?.candidates || []);
+      setSelectedAssignee('');
+      setAssignSuccess(`Work assigned to ${selectedWorker?.name || 'selected worker'} successfully.`);
+    } catch (err) {
+      setAssignError(err.response?.data?.detail || 'Assignment failed.');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   const handleStatusUpdate = async () => {
     if (!newStatus) return;
@@ -83,8 +139,65 @@ export default function ComplaintDetail() {
     }
   };
 
-  const statusLabel = (status) => t(`status_${status?.toLowerCase?.()}`, status?.replaceAll('_', ' '));
-  const imageUrl = complaint?.raw_image_url || complaint?.image_url;
+  const handleEvidenceSubmit = async (e) => {
+    e.preventDefault();
+    if (!afterFile) {
+      setEvidenceError('After image is required.');
+      return;
+    }
+
+    setEvidenceError('');
+    setEvidenceSuccess('');
+    setEvidenceLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('after_image', afterFile);
+      if (beforeFile) {
+        formData.append('before_image', beforeFile);
+      }
+      formData.append('after_timestamp', new Date().toISOString());
+
+      await verificationAPI.submit(id, formData);
+
+      const [complaintRes, verificationRes] = await Promise.allSettled([
+        complaintsAPI.get(id),
+        verificationAPI.get(id),
+      ]);
+
+      if (complaintRes.status === 'fulfilled') {
+        setComplaint(complaintRes.value.data);
+      }
+      if (verificationRes.status === 'fulfilled') {
+        setVerification(verificationRes.value.data);
+      }
+
+      setBeforeFile(null);
+      setAfterFile(null);
+      setEvidenceSuccess('Before/after evidence uploaded. Status moved to Verification Pending.');
+    } catch (err) {
+      setEvidenceError(err.response?.data?.detail || 'Evidence upload failed.');
+    } finally {
+      setEvidenceLoading(false);
+    }
+  };
+
+  const statusLabel = (status) => {
+    if (status === 'IN_PROGRESS') return 'Working on it';
+    if (status === 'VERIFICATION_PENDING') return 'Completed';
+    return t(`status_${status?.toLowerCase?.()}`, status?.replaceAll('_', ' '));
+  };
+
+  const resolveMediaUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('/')) return `${API_BASE}${url}`;
+    return url;
+  };
+
+  const imageUrl = resolveMediaUrl(complaint?.raw_image_url || complaint?.image_url);
+  const audioUrl = resolveMediaUrl(complaint?.raw_audio_url);
+  const verificationBeforeImage = resolveMediaUrl(verification?.before_image_url);
+  const verificationAfterImage = resolveMediaUrl(verification?.after_image_url);
 
   if (loading) return <LoadingSpinner label={t('complaint_loading', 'Loading complaint...')} />;
   if (!complaint) {
@@ -114,7 +227,7 @@ export default function ComplaintDetail() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100">Complaint Intelligence</p>
             <h1 className="text-xl font-bold text-white">{complaint.ai_summary || complaint.raw_text || t('complaint_details_title', 'Complaint Details')}</h1>
-            <p className="text-sm text-slate-100 mt-1">ID: {String(complaint.id || '').slice(0, 8)}</p>
+            <p className="text-sm text-slate-100 mt-1">ID: {complaint.complaint_code || String(complaint.id || '').slice(0, 8)}</p>
           </div>
           <div className="flex items-center gap-2">
             <span className={`badge ${priorityBadge[complaint.priority_level] || 'badge-low'}`}>
@@ -127,7 +240,8 @@ export default function ComplaintDetail() {
         </div>
       </div>
 
-      <div className="card p-6">
+      <div className="card p-6 relative overflow-hidden">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-cyan-100/70 blur-xl" />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="text-sm font-semibold text-slate-700">{t('complaint_details_title', 'Complaint Details')}</div>
         </div>
@@ -174,32 +288,169 @@ export default function ComplaintDetail() {
             </a>
           </div>
         )}
+
+        {complaint?.input_type === 'voice' && audioUrl && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold text-gray-500 mb-2">Uploaded Voice File</p>
+            <audio controls preload="none" className="w-full max-w-xl">
+              <source src={audioUrl} />
+            </audio>
+          </div>
+        )}
       </div>
 
       {/* Verification */}
       {verification && (
-        <div className="card p-6">
+        <div className="card p-6 border border-emerald-100">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('complaint_verification_title', '4-Layer Verification')}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <VerifyItem label={t('complaint_verify_gps', 'GPS Match')} passed={verification.gps_verified} score={verification.gps_score} t={t} />
-            <VerifyItem label={t('complaint_verify_timestamp', 'Timestamp')} passed={verification.timestamp_verified} score={verification.timestamp_score} t={t} />
-            <VerifyItem label={t('complaint_verify_visual', 'Visual Check')} passed={verification.visual_verified} score={verification.visual_score} t={t} />
+            <VerifyItem label={t('complaint_verify_gps', 'GPS Match')} passed={verification.location_match} score={verification.location_match ? 1 : 0} t={t} />
+            <VerifyItem label={t('complaint_verify_timestamp', 'Timestamp')} passed={verification.time_valid} score={verification.time_valid ? 1 : 0} t={t} />
+            <VerifyItem label={t('complaint_verify_visual', 'Visual Check')} passed={verification.visual_change_detected} score={verification.visual_change_confidence} t={t} />
             <VerifyItem label={t('complaint_verify_tamper', 'Tamper Detect')} passed={!verification.tamper_detected} score={verification.tamper_score} t={t} />
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {verificationBeforeImage && (
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Before</p>
+                <img src={verificationBeforeImage} alt="Before evidence" className="w-full rounded-xl border border-slate-200 object-cover" />
+              </div>
+            )}
+            {verificationAfterImage && (
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">After</p>
+                <img src={verificationAfterImage} alt="After evidence" className="w-full rounded-xl border border-slate-200 object-cover" />
+              </div>
+            )}
           </div>
           <div className="mt-4 flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              {t('complaint_overall_score', 'Overall Score')}: <span className="font-bold text-lg">{verification.overall_score?.toFixed(1)}%</span>
+              {t('complaint_overall_score', 'Overall Score')}: <span className="font-bold text-lg">{((verification.overall_confidence || 0) * 100).toFixed(1)}%</span>
             </span>
-            <span className={`badge ${verification.is_verified ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-              {verification.is_verified ? t('complaint_verified', 'Verified') : t('complaint_not_verified', 'Not Verified')}
+            <span className={`badge ${verification.verification_status === 'VERIFIED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              {verification.verification_status === 'VERIFIED' ? t('complaint_verified', 'Verified') : (verification.verification_status || 'PENDING')}
             </span>
           </div>
         </div>
       )}
 
+      {/* Assign Work (leaders/dept heads only) */}
+      {hasRole('LEADER', 'DEPARTMENT_HEAD', 'ADMIN') && (
+        <div className="card p-6 border border-amber-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Assign Work</h2>
+          <p className="mb-3 text-xs text-slate-600">
+            Current assignee: <span className="font-semibold text-slate-900">{complaint.assignee?.name ? `${complaint.assignee.name}${complaint.assignee?.email ? ` (${complaint.assignee.email})` : ''}` : 'Not assigned yet'}</span>
+          </p>
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Worker progress</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColors[complaint.status] || 'bg-slate-100 text-slate-700'}`}>
+              {statusLabel(complaint.status)}
+            </span>
+            <span className="text-xs text-slate-500">Updated: {new Date(complaint.updated_at).toLocaleString()}</span>
+          </div>
+          {assignError && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {assignError}
+            </div>
+          )}
+          {assignSuccess && (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {assignSuccess}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-3">
+            <select
+              value={selectedAssignee}
+              onChange={(e) => setSelectedAssignee(e.target.value)}
+              className="min-w-[260px] border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">Select worker...</option>
+              {recommendations.map((item) => (
+                <option key={item.user_id} value={item.user_id}>
+                  {item.name}{item.email ? ` (${item.email})` : ''} ({item.role}){item.department ? ` - ${item.department}` : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleAssign}
+              disabled={!selectedAssignee || assignLoading}
+              className="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            >
+              {assignLoading ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+          {!!recommendations.length && (
+            <p className="mt-3 text-xs text-slate-500">
+              Recommendation order prioritizes same-ward and department-specialized workers.
+            </p>
+          )}
+          {!recommendations.length && (
+            <p className="mt-3 text-xs text-slate-500">No worker suggestions available for this complaint right now.</p>
+          )}
+        </div>
+      )}
+
+      {/* Worker Evidence Upload */}
+      {isWorkerRole && (
+        <div className="card p-6 border border-cyan-100">
+          <h2 className="text-lg font-semibold text-slate-900">Work Completion Evidence</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Upload before and after images from worker side. This helps leaders verify that work was done.
+          </p>
+
+          {!canSubmitWorkerEvidence ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              You can upload evidence only for complaints assigned to you.
+            </div>
+          ) : (
+            <form className="mt-4 space-y-4" onSubmit={handleEvidenceSubmit}>
+              {evidenceError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{evidenceError}</div>
+              )}
+              {evidenceSuccess && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{evidenceSuccess}</div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Before image (optional)</label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => setBeforeFile(e.target.files?.[0] || null)}
+                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">After image (required)</label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => setAfterFile(e.target.files?.[0] || null)}
+                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Geo-location and capture time are detected automatically from EXIF geotag and timestamp.
+              </p>
+
+              <button
+                type="submit"
+                disabled={evidenceLoading}
+                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-700 disabled:opacity-60"
+              >
+                {evidenceLoading ? 'Uploading...' : 'Upload Before/After Evidence'}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
       {/* Status Update (leaders/dept heads only) */}
       {hasRole('LEADER', 'DEPARTMENT_HEAD', 'ADMIN') && (
-        <div className="card p-6">
+        <div className="card p-6 border border-blue-100">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('complaint_update_status', 'Update Status')}</h2>
           {statusError && (
             <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

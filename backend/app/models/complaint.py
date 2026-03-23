@@ -13,8 +13,12 @@ class Complaint(Base):
     __tablename__ = "complaints"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    complaint_code: Mapped[str] = mapped_column(String(40), unique=True, nullable=True)
     citizen_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("citizens.id"), nullable=True
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id"), nullable=True
     )
     category_id: Mapped[int] = mapped_column(
         ForeignKey("categories.id"), nullable=True
@@ -25,7 +29,8 @@ class Complaint(Base):
 
     # ── Raw input ────────────────────────────────────────
     raw_text: Mapped[str] = mapped_column(Text, nullable=True)
-    raw_audio_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    # Audio data URLs can be large; keep as TEXT to avoid truncation failures.
+    raw_audio_url: Mapped[str] = mapped_column(Text, nullable=True)
     # Data URL uploads can be several KB/MB; store as TEXT to avoid truncation.
     raw_image_url: Mapped[str] = mapped_column(Text, nullable=True)
     input_type: Mapped[str] = mapped_column(

@@ -29,6 +29,17 @@ from app.config import settings
 
 engine = create_engine(settings.DATABASE_SYNC_URL, echo=False)
 
+PROBLEM_IMAGE_URLS = [
+    "https://picsum.photos/seed/jansewa-garbage/1280/720",
+    "https://picsum.photos/seed/jansewa-pothole/1280/720",
+    "https://picsum.photos/seed/jansewa-drainage/1280/720",
+    "https://picsum.photos/seed/jansewa-waterlogging/1280/720",
+    "https://picsum.photos/seed/jansewa-streetlight/1280/720",
+    "https://picsum.photos/seed/jansewa-public-safety/1280/720",
+    "https://picsum.photos/seed/jansewa-sewage/1280/720",
+    "https://picsum.photos/seed/jansewa-road-damage/1280/720",
+]
+
 
 def seed():
     Base.metadata.create_all(engine)
@@ -81,22 +92,83 @@ def seed():
             db.flush()
             print(f"  ✅ Seeded {len(categories_data)} categories")
 
-        # ── 3. USERS (10) ───────────────────────────────
+        # ── 3. USERS (Ward leaders + specialist workers) ───────────────
         pw = hash_password("password123")
-        users_data = [
-            ("Sunita Sharma", "sunita@jansewa.gov", "LEADER", "Administration", 1),
-            ("Rajesh Kumar", "rajesh@jansewa.gov", "LEADER", "Administration", 5),
-            ("Amit Patel", "amit@jansewa.gov", "DEPARTMENT_HEAD", "Water Department", 1),
-            ("Priya Singh", "priya@jansewa.gov", "DEPARTMENT_HEAD", "Roads Department", 3),
-            ("Vikram Joshi", "vikram@jansewa.gov", "DEPARTMENT_HEAD", "Health Department", 7),
-            ("Ravi Tiwari", "ravi@jansewa.gov", "WORKER", "Water Department", 1),
-            ("Sanjay Gupta", "sanjay@jansewa.gov", "WORKER", "Roads Department", 3),
-            ("Meena Devi", "meena@jansewa.gov", "WORKER", "Sanitation Department", 6),
-            ("Arjun Yadav", "arjun@jansewa.gov", "WORKER", "Electricity Department", 9),
-            ("Nikhil Sharma", "nikhil@jansewa.gov", "OFFICER", "Public Works Officer", 3),
-            ("Ananya Rao", "ananya@jansewa.gov", "ENGINEER", "Roads Engineer", 3),
-            ("Admin User", "admin@jansewa.gov", "ADMIN", "IT", None),
+        users_data = []
+
+        # One dedicated leader for each ward (Indian names).
+        leader_names = [
+            "Sunita Sharma",
+            "Rakesh Verma",
+            "Anita Yadav",
+            "Vikram Singh",
+            "Pooja Gupta",
+            "Rajesh Kumar",
+            "Meena Joshi",
+            "Amit Tiwari",
+            "Kavita Mishra",
+            "Sanjay Chauhan",
+            "Neha Patel",
+            "Deepak Sharma",
+            "Lata Srivastava",
+            "Rohit Agarwal",
+            "Priyanka Dubey",
         ]
+        for ward_number in range(1, 16):
+            users_data.append(
+                (
+                    leader_names[ward_number - 1],
+                    f"leader.w{ward_number:02d}@jansewa.gov",
+                    "LEADER",
+                    "Administration",
+                    ward_number,
+                )
+            )
+
+        # Specialist workers per ward per complaint category.
+        worker_specializations = [
+            ("water", "Water Department", "Water Specialist"),
+            ("road", "Roads Department", "Road Specialist"),
+            ("electricity", "Electricity Department", "Electricity Specialist"),
+            ("drainage", "Drainage Department", "Drainage Specialist"),
+            ("garbage", "Sanitation Department", "Sanitation Specialist"),
+            ("health", "Health Department", "Health Specialist"),
+            ("safety", "Safety Department", "Safety Specialist"),
+        ]
+
+        worker_first_names = [
+            "Arjun", "Ravi", "Suresh", "Mahesh", "Kiran", "Nitin", "Pradeep", "Vivek", "Aakash", "Manoj",
+            "Alok", "Dinesh", "Gaurav", "Harish", "Jitendra", "Lokesh", "Naresh", "Omkar", "Pankaj", "Rahul",
+        ]
+        worker_last_names = [
+            "Kumar", "Sharma", "Verma", "Yadav", "Tiwari", "Patel", "Singh", "Mishra", "Gupta", "Chauhan",
+            "Pandey", "Saxena", "Agarwal", "Tripathi", "Dubey", "Srivastava", "Rawat", "Joshi", "Maurya", "Thakur",
+        ]
+
+        for ward_number in range(1, 16):
+            for spec_index, (slug, department, title) in enumerate(worker_specializations):
+                first = worker_first_names[(ward_number + spec_index * 2) % len(worker_first_names)]
+                last = worker_last_names[(ward_number * 3 + spec_index) % len(worker_last_names)]
+                users_data.append(
+                    (
+                        f"{first} {last}",
+                        f"w{ward_number:02d}.{slug}@jansewa.gov",
+                        "WORKER",
+                        department,
+                        ward_number,
+                    )
+                )
+
+        # Cross-ward operations users.
+        users_data.extend([
+            ("Sunny Kumar", "sunny.worker@jansewa.gov", "WORKER", "Roads Department", 1),
+            ("Water Department Head", "dh.water@jansewa.gov", "DEPARTMENT_HEAD", "Water Department", None),
+            ("Roads Department Head", "dh.roads@jansewa.gov", "DEPARTMENT_HEAD", "Roads Department", None),
+            ("Health Department Head", "dh.health@jansewa.gov", "DEPARTMENT_HEAD", "Health Department", None),
+            ("Public Works Officer", "officer.publicworks@jansewa.gov", "OFFICER", "Public Works", None),
+            ("Roads Engineer", "engineer.roads@jansewa.gov", "ENGINEER", "Roads Department", None),
+            ("Admin User", "admin@jansewa.gov", "ADMIN", "IT", None),
+        ])
         ward_id_by_number = {
             w.ward_number: w.id
             for w in db.query(Ward).all()
@@ -107,15 +179,35 @@ def seed():
             if u.email
         }
         seeded_users = 0
+        updated_users = 0
         for name, email, role, dept, wid in users_data:
-            if email in existing_users_by_email:
+            existing_user = existing_users_by_email.get(email)
+            resolved_ward_id = ward_id_by_number.get(wid) if wid is not None else None
+
+            if existing_user:
+                changed = False
+                if existing_user.name != name:
+                    existing_user.name = name
+                    changed = True
+                if existing_user.role != role:
+                    existing_user.role = role
+                    changed = True
+                if existing_user.department != dept:
+                    existing_user.department = dept
+                    changed = True
+                if existing_user.ward_id != resolved_ward_id:
+                    existing_user.ward_id = resolved_ward_id
+                    changed = True
+                if changed:
+                    updated_users += 1
                 continue
+
             db.add(User(
                 name=name,
                 email=email,
                 role=role,
                 department=dept,
-                ward_id=ward_id_by_number.get(wid) if wid is not None else None,
+                ward_id=resolved_ward_id,
                 password_hash=pw,
                 phone=f"+9198{random.randint(10000000,99999999)}",
             ))
@@ -124,6 +216,9 @@ def seed():
         if seeded_users:
             db.flush()
             print(f"  ✅ Seeded {seeded_users} demo users")
+        if updated_users:
+            db.flush()
+            print(f"  ✅ Updated {updated_users} demo users")
 
         # ── 4. CITIZENS (20) ────────────────────────────
         citizen_names = [
@@ -218,6 +313,8 @@ def seed():
                 citizen = random.choice(citizens)
                 ward_id = random.choice(ward_ids) if ward_ids else None
                 status = random.choice(statuses)
+                input_type = random.choice(["text", "text", "text", "voice", "image"])
+                raw_image_url = PROBLEM_IMAGE_URLS[i % len(PROBLEM_IMAGE_URLS)] if input_type == "image" else None
                 created = datetime.utcnow() - timedelta(
                     days=random.randint(0, 30),
                     hours=random.randint(0, 23),
@@ -236,7 +333,8 @@ def seed():
                     category_id=cat_map.get(cat_name, other_category_id),
                     ward_id=ward_id,
                     raw_text=text,
-                    input_type=random.choice(["text", "text", "text", "voice", "image"]),
+                    input_type=input_type,
+                    raw_image_url=raw_image_url,
                     source_language=lang,
                     ai_summary=text[:120],
                     ai_location=f"Ward {ward_id} area" if ward_id is not None else "Ward area",
@@ -280,13 +378,15 @@ def seed():
             ver_statuses = ["VERIFIED"] * 7 + ["REJECTED"] * 2 + ["MANUAL_REVIEW"]
             for i, complaint in enumerate(resolved):
                 vs = ver_statuses[i] if i < len(ver_statuses) else "VERIFIED"
+                before_image = complaint.raw_image_url or PROBLEM_IMAGE_URLS[i % len(PROBLEM_IMAGE_URLS)]
+                after_image = PROBLEM_IMAGE_URLS[(i + 1) % len(PROBLEM_IMAGE_URLS)]
                 db.add(Verification(
                     complaint_id=complaint.id,
-                    before_image_url=f"https://placehold.co/400x300?text=Before_{i+1}",
+                    before_image_url=before_image,
                     before_latitude=28.6139 + random.uniform(-0.01, 0.01),
                     before_longitude=77.2090 + random.uniform(-0.01, 0.01),
                     before_timestamp=complaint.created_at,
-                    after_image_url=f"https://placehold.co/400x300?text=After_{i+1}",
+                    after_image_url=after_image,
                     after_latitude=28.6139 + random.uniform(-0.001, 0.001),
                     after_longitude=77.2090 + random.uniform(-0.001, 0.001),
                     after_timestamp=complaint.created_at + timedelta(days=2),

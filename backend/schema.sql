@@ -52,13 +52,15 @@ CREATE TABLE IF NOT EXISTS citizens (
 -- ── COMPLAINTS ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS complaints (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    complaint_code VARCHAR(40) UNIQUE,
     citizen_id UUID REFERENCES citizens(id),
+    created_by UUID REFERENCES users(id),
     category_id INTEGER REFERENCES categories(id),
     ward_id INTEGER REFERENCES wards(id),
 
     raw_text TEXT,
-    raw_audio_url VARCHAR(500),
-    raw_image_url VARCHAR(500),
+    raw_audio_url TEXT,
+    raw_image_url TEXT,
     input_type VARCHAR(20) NOT NULL,
     source_language VARCHAR(20),
 

@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # ── External services ───────────────────────────────
     GOOGLE_MAPS_API_KEY: Optional[str] = None
     TWITTER_BEARER_TOKEN: Optional[str] = None
+    MSG91_AUTH_KEY: Optional[str] = None
+    MSG91_SMS_FLOW_ID: Optional[str] = None
+    MSG91_SMS_SENDER: Optional[str] = None
+    MSG91_WHATSAPP_FLOW_ID: Optional[str] = None
+    MSG91_WHATSAPP_NUMBER: Optional[str] = None
+    MSG91_WHATSAPP_ENDPOINT: str = "https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/"
+
+    # Backward-compatible deprecated keys (ignored by MSG91 implementation).
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_SMS_FROM: Optional[str] = None

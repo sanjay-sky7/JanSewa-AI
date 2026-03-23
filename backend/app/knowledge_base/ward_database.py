@@ -5,6 +5,9 @@ Comprehensive demographic, infrastructure, and vulnerability data
 for all 15 wards. Used by priority engine, dashboard, and public portal.
 """
 
+import re
+import unicodedata
+
 # ─────────────────────────────────────────────────────────
 # WARD DATABASE — Complete profiles for 15 Delhi wards
 # ─────────────────────────────────────────────────────────
@@ -517,17 +520,65 @@ def get_ward_vulnerability_score(ward_id: int) -> int:
 
 
 def get_ward_by_location(text: str) -> dict | None:
-    """Find a ward by matching location names in text."""
-    text_lower = text.lower()
+    """Find a ward by matching names, ward number hints, and landmark aliases."""
+    if not text:
+        return None
+
+    normalized_text = _normalize_location_text(text)
+
+    ward_match = re.search(r"\bward\s*(?:no\.?|number)?\s*(\d{1,2})\b", normalized_text)
+    if ward_match:
+        try:
+            ward_id = int(ward_match.group(1))
+            ward = WARDS.get(ward_id)
+            if ward:
+                return {"id": ward_id, **ward}
+        except Exception:
+            pass
+
+    best: dict | None = None
+    best_score = 0
+
     for wid, ward in WARDS.items():
-        # Check ward name
-        if ward["name"].lower() in text_lower:
-            return {"id": wid, **ward}
-        # Check landmarks
+        score = 0
+
+        ward_name = _normalize_location_text(ward.get("name", ""))
+        ward_name_hi = _normalize_location_text(ward.get("name_hi", ""))
+        zone_name = _normalize_location_text(ward.get("zone", ""))
+
+        if ward_name and ward_name in normalized_text:
+            score += 8
+        if ward_name_hi and ward_name_hi in normalized_text:
+            score += 7
+        if zone_name and zone_name in normalized_text:
+            score += 1
+
+        name_tokens = [token for token in ward_name.split() if len(token) >= 4]
+        token_hits = sum(1 for token in name_tokens if token in normalized_text)
+        score += min(3, token_hits)
+
         for landmark in ward.get("major_landmarks", []):
-            if landmark.lower() in text_lower:
-                return {"id": wid, **ward}
-    return None
+            lm = _normalize_location_text(landmark)
+            if lm and lm in normalized_text:
+                score += 5
+            else:
+                lm_tokens = [token for token in lm.split() if len(token) >= 5]
+                if any(token in normalized_text for token in lm_tokens):
+                    score += 2
+
+        if score > best_score:
+            best_score = score
+            best = {"id": wid, **ward}
+
+    return best if best_score >= 3 else None
+
+
+def _normalize_location_text(text: str) -> str:
+    compact = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode("ascii")
+    compact = compact.lower().replace("&", " and ")
+    compact = re.sub(r"[^a-z0-9\s]", " ", compact)
+    compact = re.sub(r"\s+", " ", compact).strip()
+    return compact
 
 
 def get_nearest_ward(lat: float, lng: float) -> dict | None:

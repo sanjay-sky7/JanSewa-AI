@@ -63,13 +63,13 @@ HELP_ARTICLES = [
         "title": "Enable complaint updates via SMS and WhatsApp",
         "category": "Notifications",
         "audience": ["ADMIN", "LEADER", "DEPARTMENT_HEAD"],
-        "summary": "Configure Twilio credentials and sender numbers to deliver registration and status update messages.",
+        "summary": "Configure MSG91 credentials and flow IDs to deliver registration and status update messages.",
         "steps": [
-            "Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in backend .env.",
-            "Set TWILIO_SMS_FROM and TWILIO_WHATSAPP_FROM sender values.",
+            "Set MSG91_AUTH_KEY in backend .env.",
+            "Set MSG91_SMS_FLOW_ID and MSG91_WHATSAPP_FLOW_ID values.",
             "Restart backend service and test with a new complaint.",
         ],
-        "keywords": ["sms", "whatsapp", "twilio", "notification", "confirmation"],
+        "keywords": ["sms", "whatsapp", "msg91", "notification", "confirmation"],
     },
 ]
 

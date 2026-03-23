@@ -70,6 +70,7 @@ class WardOut(BaseModel):
 class AssigneeOut(BaseModel):
     id: uuid.UUID
     name: str
+    email: Optional[str] = None
     role: str
     department: Optional[str] = None
 
@@ -79,6 +80,7 @@ class AssigneeOut(BaseModel):
 
 class ComplaintOut(BaseModel):
     id: uuid.UUID
+    complaint_code: Optional[str] = None
     citizen_id: Optional[uuid.UUID] = None
     category: Optional[CategoryOut] = None
     ward: Optional[WardOut] = None
@@ -112,6 +114,7 @@ class ComplaintOut(BaseModel):
 
     is_duplicate: bool = False
     duplicate_of: Optional[uuid.UUID] = None
+    is_new_for_user: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
 
@@ -175,6 +178,7 @@ class NotificationSeenOut(BaseModel):
 class AssignmentRecommendationItem(BaseModel):
     user_id: uuid.UUID
     name: str
+    email: Optional[str] = None
     role: str
     department: Optional[str] = None
     ward_id: Optional[int] = None

@@ -27,6 +27,23 @@ _vision_client = None
 _vision_available = False
 
 
+def _apply_local_category_overrides(raw_text: str, category: str) -> str:
+    text = (raw_text or "").lower()
+
+    drainage_terms = ["drain", "drainage", "sewage", "manhole", "naali", "nali", "ganda paani"]
+    garbage_terms = ["garbage", "kachra", "dustbin", "waste", "kooda", "kuda"]
+    road_terms = ["pothole", "road", "sadak", "gaddha", "crack", "divider"]
+
+    if any(term in text for term in drainage_terms):
+        return "Drainage"
+    if any(term in text for term in garbage_terms):
+        return "Garbage"
+    if any(term in text for term in road_terms):
+        return "Road/Pothole"
+
+    return category
+
+
 def _get_model():
     """Lazy-init the Gemini model (optional enhancement)."""
     global _model, _gemini_available
@@ -96,6 +113,7 @@ def _parse_json(text: str) -> dict:
 async def extract_complaint_details(
     raw_text: str,
     source_language: str = "auto",
+    allow_external_enhancement: bool = False,
 ) -> dict:
     """
     Extract structured information from raw complaint text.
@@ -108,22 +126,27 @@ async def extract_complaint_details(
     dept = get_department(kb_result.get("category", "Other"))
 
     result = {
-        "summary_english": kb_result.get("summary_en", raw_text[:200]),
-        "summary_hindi": kb_result.get("summary_hi", ""),
+        "summary_english": kb_result.get("summary_english", raw_text[:200]),
+        "summary_hindi": kb_result.get("summary_hindi", ""),
         "category": kb_result.get("category", "Other"),
-        "category_confidence": kb_result.get("confidence", 0.5),
-        "location_text": kb_result.get("location"),
+        "category_confidence": kb_result.get("category_confidence", 0.5),
+        "location_text": kb_result.get("location_text"),
         "ward_number": kb_result.get("ward_number"),
         "duration_days": kb_result.get("duration_days"),
         "severity_keywords": kb_result.get("severity_keywords", []),
-        "affected_estimate": kb_result.get("impact", "individual"),
+        "affected_estimate": kb_result.get("affected_estimate", "individual"),
         "is_emergency": kb_result.get("is_emergency", False),
-        "requires_department": dept.get("name_en", "General Administration"),
+        "requires_department": kb_result.get("requires_department") or dept.get("name_en", "General Administration"),
         "source": "knowledge_base",
     }
 
+    overridden_category = _apply_local_category_overrides(raw_text, result["category"])
+    if overridden_category != result["category"]:
+        result["category"] = overridden_category
+        result["category_confidence"] = max(float(result.get("category_confidence") or 0), 0.8)
+
     # ── STEP 2: Optional Gemini enhancement ──────────────
-    model = _get_model()
+    model = _get_model() if allow_external_enhancement else None
     if model and _gemini_available:
         try:
             prompt = f"""

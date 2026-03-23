@@ -55,6 +55,30 @@ async def init_db():
                 text(
                     """
                     ALTER TABLE complaints
+                    ADD COLUMN IF NOT EXISTS complaint_code VARCHAR(40)
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE complaints
+                    ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE complaints
+                    ALTER COLUMN raw_audio_url TYPE TEXT
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE complaints
                     ALTER COLUMN raw_image_url TYPE TEXT
                     """
                 )

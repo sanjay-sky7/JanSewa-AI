@@ -50,6 +50,7 @@ export const complaintsAPI = {
   categories: () => api.get('/complaints/categories'),
   list: (params) => api.get('/complaints', { params }),
   mine: (params) => api.get('/complaints/mine', { params }),
+  myAssigned: (params) => api.get('/complaints/assigned/me', { params }),
   myNotifications: (params) => api.get('/complaints/citizen/notifications', { params }),
   markNotificationsSeen: () => api.post('/complaints/citizen/notifications/mark-seen'),
   get: (id) => api.get(`/complaints/${id}`),
@@ -57,13 +58,16 @@ export const complaintsAPI = {
   priorityQueue: (params) => api.get('/complaints/priority-queue', { params }),
   stats: () => api.get('/complaints/stats'),
   byWard: (wardId, params) => api.get(`/complaints/ward/${wardId}`, { params }),
+  assignmentRecommendations: (id) => api.get(`/complaints/${id}/assignment-recommendations`),
   assign: (id, data) => api.put(`/complaints/${id}/assign`, data),
   updateStatus: (id, data) => api.put(`/complaints/${id}/status`, data),
 };
 
 // ── Verification ────────────────────────────────────────
 export const verificationAPI = {
-  submit: (complaintId, data) => api.post(`/verification/${complaintId}`, data),
+  submit: (complaintId, data) => api.post(`/verification/${complaintId}`, data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   get: (complaintId) => api.get(`/verification/${complaintId}`),
   approve: (verificationId, data) => api.post(`/verification/${verificationId}/approve`, data),
 };

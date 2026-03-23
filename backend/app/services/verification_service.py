@@ -28,7 +28,7 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 
 async def verify_work_completion(
-    before_image_path: str,
+    before_image_path: Optional[str],
     after_image_path: str,
     original_latitude: Optional[float],
     original_longitude: Optional[float],
@@ -57,10 +57,10 @@ async def verify_work_completion(
 
     # ── LAYER 1: GPS LOCATION MATCH ─────────────────────
     if (
-        original_latitude
-        and original_longitude
-        and after_exif.get("gps_latitude")
-        and after_exif.get("gps_longitude")
+        original_latitude is not None
+        and original_longitude is not None
+        and after_exif.get("gps_latitude") is not None
+        and after_exif.get("gps_longitude") is not None
     ):
         distance = haversine_distance(
             original_latitude,
@@ -159,6 +159,12 @@ Return ONLY the JSON.
             from PIL import Image as PILImage
             import numpy as np
 
+            if not before_image_path:
+                result["remarks"].append(
+                    "⚠️ Before image unavailable — visual change comparison skipped"
+                )
+                raise ValueError("before image missing")
+
             before_img = PILImage.open(before_image_path).convert("RGB").resize((256, 256))
             after_img = PILImage.open(after_image_path).convert("RGB").resize((256, 256))
 
@@ -181,6 +187,8 @@ Return ONLY the JSON.
             result["remarks"].append(
                 "⚠️ numpy not installed — pixel-diff analysis unavailable, visual check skipped"
             )
+        except ValueError:
+            pass
         except Exception as e:
             logger.error(f"Pixel-diff analysis failed: {e}")
             result["remarks"].append(f"⚠️ Visual analysis unavailable: {e}")

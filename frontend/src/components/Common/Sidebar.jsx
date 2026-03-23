@@ -4,6 +4,17 @@ import { useLanguage } from '../../context/LanguageContext';
 
 const menuItems = [
   {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
+    roles: ['CITIZEN', 'LEADER', 'DEPARTMENT_HEAD', 'WORKER', 'OFFICER', 'ENGINEER', 'ADMIN'],
+  },
+  {
     to: '/register-complaint',
     label: 'Register Complaint',
     icon: (
@@ -26,15 +37,15 @@ const menuItems = [
     roles: ['CITIZEN'],
   },
   {
-    to: '/dashboard',
-    label: 'Dashboard',
+    to: '/know-your-leader',
+    label: 'Know Your Leader',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422A12.083 12.083 0 0112 20.055a12.083 12.083 0 01-6.16-9.477L12 14z" />
       </svg>
     ),
-    roles: ['CITIZEN', 'LEADER', 'DEPARTMENT_HEAD', 'WORKER', 'OFFICER', 'ENGINEER', 'ADMIN'],
+    roles: ['CITIZEN'],
   },
   {
     to: '/manage-complaints',
@@ -124,6 +135,7 @@ export default function Sidebar() {
       '/register-complaint': 'side_register_complaint',
       '/my-complaints': 'side_my_complaints',
       '/dashboard': 'side_dashboard',
+      '/know-your-leader': 'side_know_your_leader',
       '/manage-complaints': 'side_manage_complaints',
       '/social': 'side_social_media',
       '/communications': 'side_communications',
@@ -175,6 +187,14 @@ export default function Sidebar() {
               className="mt-3 inline-flex items-center rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600"
             >
               {t('help_call_now', 'Call 1800-123-456')}
+            </a>
+            <a
+              href="https://wa.me/918112561625"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center rounded-xl bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-800"
+            >
+              WhatsApp 8112561625
             </a>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">

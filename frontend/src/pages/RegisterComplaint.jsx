@@ -327,6 +327,18 @@ export default function RegisterComplaint() {
         <p className="mt-2 max-w-3xl text-sm text-slate-100/90">
           {t('register_subtitle', 'Submit issues through text, voice, or image evidence. Complaints are triaged and prioritized automatically for governance teams.')}
         </p>
+        <div className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200/60 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-50">
+          <span className="font-semibold">WhatsApp Complaint Line:</span>
+          <span className="rounded-md bg-white/15 px-2 py-0.5 font-bold tracking-wide">8112561625</span>
+          <a
+            href="https://wa.me/918112561625"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md bg-emerald-500 px-2 py-0.5 font-semibold text-white transition hover:bg-emerald-600"
+          >
+            Open Chat
+          </a>
+        </div>
       </header>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">

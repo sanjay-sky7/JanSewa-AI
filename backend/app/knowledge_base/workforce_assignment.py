@@ -73,6 +73,7 @@ def recommend_assignees(complaint: Any, candidates: list[Any]) -> dict[str, Any]
             {
                 "user_id": user.id,
                 "name": user.name,
+                "email": getattr(user, "email", None),
                 "role": user.role,
                 "department": user.department,
                 "ward_id": user.ward_id,

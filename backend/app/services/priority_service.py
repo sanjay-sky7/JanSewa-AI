@@ -16,7 +16,7 @@ from app.models.complaint import Complaint
 from app.models.ward import Ward
 from app.models.social_post import SocialPost
 
-from app.knowledge_base.priority_rules import ESCALATION_RULES
+from app.knowledge_base.priority_rules import ESCALATION_RULES, calculate_priority_kb
 from app.knowledge_base.ward_database import get_ward_vulnerability_score
 from app.knowledge_base.governance_policies import get_sla, get_escalation_target
 
@@ -48,6 +48,12 @@ SEVERITY_SIGNAL_SCORES: dict[str, int] = {
     "hospital": 7,
     "no water": 8,
     "power cut": 6,
+    "collapsed": 12,
+    "toxic": 10,
+    "sewage": 9,
+    "electrocution": 12,
+    "school": 7,
+    "hospital emergency": 11,
 }
 
 
@@ -83,6 +89,13 @@ async def calculate_priority_score(
             if signal in token:
                 severity_boost = max(severity_boost, score)
     urgency = min(100, urgency + severity_boost)
+
+    sla = get_sla("high" if urgency >= 60 else "medium")
+    sla_target_hours = int((sla or {}).get("target_hours") or 72)
+    if sla_target_hours <= 6:
+        urgency = min(100, urgency + 10)
+    elif sla_target_hours <= 12:
+        urgency = min(100, urgency + 6)
 
     # ── FACTOR 2: IMPACT (25%) ───────────────────────────
     impact_map = {
@@ -240,6 +253,21 @@ async def calculate_priority_score(
         + 0.10 * vulnerability
     )
 
+    # Blend in deterministic KB rules to improve consistency for edge cases.
+    kb_priority = calculate_priority_kb(
+        {
+            "category": category,
+            "urgency_score": urgency,
+            "is_emergency": complaint_data.get("is_emergency", False),
+            "duration_days": duration,
+            "affected_estimate": complaint_data.get("affected_estimate", "individual"),
+            "ward_number": ward_number,
+            "text_lower": " ".join(severity_keywords),
+        },
+        recurrence_count=max(1, int(recurrence / 10)),
+    )
+    final_score = int(round(0.7 * final_score + 0.3 * int(kb_priority.get("final_priority_score", final_score))))
+
     # Escalate compound risk combinations so high-impact emergencies do not under-rank.
     if complaint_data.get("is_emergency") and (impact >= 75 or recurrence >= 55):
         final_score = min(100, final_score + 8)
@@ -271,6 +299,7 @@ async def calculate_priority_score(
             "sentiment": f"{int(sentiment_priority)} × 0.15 = {0.15 * sentiment_priority:.1f}",
             "vulnerability": f"{vulnerability} × 0.10 = {0.10 * vulnerability:.1f}",
             "social_pressure": f"{social_pressure} (adjusts recurrence + sentiment)",
+            "kb_blend": f"30% blend from KB score {kb_priority.get('final_priority_score', final_score)}",
         },
         # ── KB enrichment ────────────────────────────────
         "sla": get_sla(level.lower()),

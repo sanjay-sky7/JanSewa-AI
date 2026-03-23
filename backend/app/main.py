@@ -1,9 +1,11 @@
 """FastAPI application entry point."""
 
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
@@ -17,6 +19,7 @@ from app.routers import (
     communications,
     dashboard,
     public,
+    whatsapp,
 )
 
 
@@ -24,7 +27,7 @@ from app.routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    
+    await init_db()
     yield
     # Shutdown (nothing to tear down for now)
 
@@ -86,3 +89,8 @@ app.include_router(social.router, prefix="/api/social", tags=["Social Media"])
 app.include_router(communications.router, prefix="/api/communications", tags=["Communications"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(public.router, prefix="/api/public", tags=["Public Portal"])
+app.include_router(whatsapp.router, prefix="/api/whatsapp", tags=["WhatsApp Bot"])
+
+uploads_dir = Path(__file__).resolve().parents[1] / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")

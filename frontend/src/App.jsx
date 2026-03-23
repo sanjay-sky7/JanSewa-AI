@@ -7,6 +7,7 @@ import { ThemeProvider } from './context/ThemeContext';
 // Pages
 import Login from './pages/Login';
 import LeaderDashboard from './pages/LeaderDashboard';
+import WorkerDashboard from './pages/WorkerDashboard';
 import ComplaintDetail from './pages/ComplaintDetail';
 import VerificationPage from './pages/VerificationPage';
 import SocialMediaInsights from './pages/SocialMediaInsights';
@@ -19,6 +20,7 @@ import MyComplaints from './pages/MyComplaints';
 import CitizenDashboard from './pages/CitizenDashboard';
 import HelpCenter from './pages/HelpCenter';
 import AboutDeveloper from './pages/AboutDeveloper';
+import KnowYourLeader from './pages/KnowYourLeader';
 
 // Layout
 import Navbar from './components/Common/Navbar';
@@ -67,6 +69,7 @@ function HomeRedirect() {
 function DashboardEntry() {
   const { user } = useAuth();
   if (user?.role === 'CITIZEN') return <CitizenDashboard />;
+  if (['WORKER', 'OFFICER', 'ENGINEER'].includes(user?.role)) return <WorkerDashboard />;
   return <LeaderDashboard />;
 }
 
@@ -122,6 +125,14 @@ export default function App() {
             element={(
               <RoleRoute roles={['CITIZEN']}>
                 <MyComplaints />
+              </RoleRoute>
+            )}
+          />
+          <Route
+            path="/know-your-leader"
+            element={(
+              <RoleRoute roles={['CITIZEN']}>
+                <KnowYourLeader />
               </RoleRoute>
             )}
           />

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiCheckCircle, FiEye, FiEyeOff, FiKey, FiLock, FiMail, FiUser } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import LiveDateTime from '../components/Common/LiveDateTime';
 
 export default function Login() {
   const { login, register, forgotPassword } = useAuth();
@@ -151,11 +150,21 @@ export default function Login() {
       )}
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 overflow-hidden rounded-[2rem] border border-slate-200 bg-white/90 shadow-2xl backdrop-blur lg:grid-cols-2">
-        <section className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(255,153,51,0.34),transparent_38%),radial-gradient(circle_at_88%_16%,rgba(56,189,248,0.25),transparent_32%),linear-gradient(145deg,#0f172a_2%,#0a2a63_45%,#0d9488_72%,#138808_100%)] p-10 text-slate-100 lg:block">
-          <div className="absolute -left-24 top-14 h-72 w-72 rounded-full bg-[#ff9933]/25 blur-3xl" />
-          <div className="absolute right-0 top-10 h-48 w-48 rounded-full bg-white/15 blur-2xl" />
-          <div className="absolute -right-16 bottom-8 h-72 w-72 rounded-full bg-[#138808]/25 blur-3xl" />
-          <div className="absolute -right-24 -top-16 h-64 w-64 rounded-full border border-white/20" />
+        <section
+          className="relative hidden overflow-hidden p-10 text-slate-100 lg:block"
+          style={{
+            backgroundImage: 'radial-gradient(circle at 12% 20%, rgba(255, 153, 51, 0.30), transparent 36%), radial-gradient(circle at 82% 24%, rgba(103, 232, 249, 0.26), transparent 38%), radial-gradient(circle at 76% 74%, rgba(34, 211, 238, 0.28), transparent 42%), linear-gradient(156deg, #140f33 0%, #162964 42%, #123b7c 68%, #0e2d68 100%)',
+            backgroundPosition: 'center, center, center, center',
+            backgroundSize: 'cover, cover, cover, cover',
+            backgroundRepeat: 'no-repeat',
+          }}
+        >
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,7,18,0.08)_0%,rgba(3,7,18,0.40)_56%,rgba(3,7,18,0.78)_100%)]" />
+          <div className="absolute -left-16 top-6 h-56 w-56 rounded-full bg-[#ff9933]/24 blur-3xl" />
+          <div className="absolute right-[-72px] top-[-40px] h-64 w-64 rounded-full border border-white/20" />
+          <div className="absolute right-[-100px] bottom-[-120px] h-80 w-80 rounded-full bg-[#22d3ee]/26 blur-3xl" />
+          <div className="absolute bottom-12 right-6 h-1.5 w-72 -rotate-6 rounded-full bg-gradient-to-r from-[#f59e0b]/78 via-cyan-300/78 to-transparent" />
+          <div className="absolute bottom-10 right-8 h-1 w-64 -rotate-6 rounded-full bg-gradient-to-r from-[#f59e0b]/55 via-cyan-200/55 to-transparent" />
 
           <div className="relative z-10">
             <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/25 bg-black/20 px-4 py-2 text-sm">
@@ -177,8 +186,13 @@ export default function Login() {
               <InfoMini title="AI Routing" value="Enabled" />
             </div>
 
-            <div className="mt-7 flex items-center gap-3">
-              <LiveDateTime tone="dark" />
+            <div className="mt-20 flex w-full justify-center">
+              <p
+                className="text-center text-[2.25rem] font-semibold leading-[1.3] text-white/95"
+                style={{ fontFamily: '"Noto Serif Devanagari", "Tiro Devanagari Hindi", "Playfair Display", Georgia, serif' }}
+              >
+                !! वसुधैव कुटुम्बकम् !!
+              </p>
             </div>
           </div>
         </section>
@@ -405,7 +419,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-r from-[#ff9933] to-[#138808] py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl bg-gradient-to-r from-[#05143d] via-[#052257] to-[#032a6d] py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? t('login_please_wait', 'Please wait...') : actionLabel}
             </button>

@@ -114,6 +114,17 @@ const menuItems = [
     roles: ['CITIZEN', 'LEADER', 'DEPARTMENT_HEAD', 'WORKER', 'OFFICER', 'ENGINEER', 'ADMIN'],
   },
   {
+    to: '/features',
+    label: 'System Features',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+    roles: ['CITIZEN', 'LEADER', 'DEPARTMENT_HEAD', 'WORKER', 'OFFICER', 'ENGINEER', 'ADMIN'],
+  },
+  {
     to: '/about-developer',
     label: 'About Developer',
     icon: (
@@ -142,6 +153,7 @@ export default function Sidebar() {
       '/public': 'side_public_portal',
       '/profile': 'side_my_profile',
       '/help': 'side_help_center',
+      '/features': 'side_features',
       '/about-developer': 'side_about_developer',
     };
     const labelKey = keyByPath[item.to];
@@ -154,14 +166,14 @@ export default function Sidebar() {
   const navLinkClass = ({ isActive }) =>
     `premium-nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
       isActive
-        ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-white ring-1 ring-cyan-100/30 shadow'
-        : 'text-slate-100 hover:bg-white/10 hover:text-white'
+        ? 'bg-gradient-to-r from-[#0d2953] to-[#1a457c] text-white ring-1 ring-blue-100/30 shadow'
+        : 'text-slate-100 hover:bg-[#12315f]/45 hover:text-white'
     }`;
 
   return (
     <aside className="hidden lg:flex lg:flex-shrink-0">
       <div className="premium-sidebar w-72 border-r border-slate-900/20 pt-6 pb-5 flex flex-col shadow-2xl">
-        <div className="mx-4 mb-4 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
+        <div className="mx-4 mb-4 rounded-2xl border border-blue-100/20 bg-gradient-to-r from-[#244a68]/88 to-[#2c5677]/88 px-4 py-3 backdrop-blur-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-100">Control Center</p>
           <p className="mt-1 text-sm font-semibold text-white">Jansewa Operations</p>
         </div>
@@ -179,12 +191,12 @@ export default function Sidebar() {
 
         {/* Bottom section */}
         <div className="px-3 mt-auto">
-          <div className="mb-3 rounded-2xl border border-emerald-200/40 bg-emerald-300/10 p-4 backdrop-blur-sm">
-            <p className="text-xs font-semibold text-emerald-100 mb-1">{t('help_title', 'Need Help?')}</p>
-            <p className="text-xs text-emerald-100/90">{t('help_subtitle', 'Call Jansewa helpline for immediate support')}</p>
+          <div className="mb-3 rounded-2xl border border-blue-100/20 bg-[#11335e]/45 p-4 backdrop-blur-sm">
+            <p className="text-xs font-semibold text-cyan-100 mb-1">{t('help_title', 'Need Help?')}</p>
+            <p className="text-xs text-cyan-100/90">{t('help_subtitle', 'Call Jansewa helpline for immediate support')}</p>
             <a
               href="tel:+911800123456"
-              className="mt-3 inline-flex items-center rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600"
+              className="mt-3 inline-flex items-center rounded-xl bg-[#1b568f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#2268a8]"
             >
               {t('help_call_now', 'Call 1800-123-456')}
             </a>
@@ -192,12 +204,12 @@ export default function Sidebar() {
               href="https://wa.me/918112561625"
               target="_blank"
               rel="noreferrer"
-              className="mt-2 inline-flex items-center rounded-xl bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-800"
+              className="mt-2 inline-flex items-center rounded-xl bg-[#0f3156] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#154170]"
             >
               WhatsApp 8112561625
             </a>
           </div>
-          <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
+          <div className="rounded-2xl border border-blue-100/20 bg-[#0f3158]/45 p-4 backdrop-blur-sm">
             <p className="text-xs font-semibold text-cyan-100 mb-1">Jansewa AI v1.0</p>
             <p className="text-xs text-slate-100/90">
               {t('side_platform_tagline', 'AI-Powered Governance Intelligence Platform')}

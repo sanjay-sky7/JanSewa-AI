@@ -76,7 +76,7 @@ export default function MyProfile() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-r from-[#ff9933] via-[#102a5f] to-[#138808] p-8 text-white shadow-lg">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-r from-[#0b1230] via-[#0f2a66] to-[#0d4f8f] p-8 text-white shadow-lg">
         <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">{t('profile_title', 'My Profile')}</p>
         <div className="mt-4 flex items-center gap-5">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/30 bg-white/10 text-xl font-bold">

@@ -43,9 +43,9 @@ export default function HelpCenter() {
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-700 via-primary-700 to-blue-800 p-6 md:p-8 text-white">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#040b20] via-[#08214d] to-[#0b2e68] p-6 md:p-8 text-white">
         <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/15 blur-2xl" />
-        <div className="absolute -left-16 -bottom-16 h-52 w-52 rounded-full bg-cyan-300/20 blur-3xl" />
+        <div className="absolute -left-16 -bottom-16 h-52 w-52 rounded-full bg-blue-300/16 blur-3xl" />
         <div className="relative">
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">{t('help_center_tag', 'Support Hub')}</p>
           <h1 className="mt-2 text-2xl md:text-3xl font-bold">{t('help_center_title', 'Jansewa Help Center')}</h1>

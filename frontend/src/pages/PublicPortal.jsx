@@ -208,9 +208,9 @@ export default function PublicPortal() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_20%_0%,rgba(14,165,233,0.12),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.08),transparent_30%),#f8fafc]">
       {/* Hero */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-cyan-700 via-primary-700 to-blue-800 text-white py-14 px-4">
+      <div className="relative overflow-hidden bg-gradient-to-r from-[#040b20] via-[#08214d] to-[#0b2e68] text-white py-14 px-4">
         <div className="absolute -top-24 -right-16 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-20 -left-16 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl" />
+        <div className="absolute -bottom-20 -left-16 h-72 w-72 rounded-full bg-blue-300/16 blur-3xl" />
         <div className="max-w-5xl mx-auto text-center relative">
           <button
             type="button"

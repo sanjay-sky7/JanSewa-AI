@@ -21,6 +21,7 @@ import CitizenDashboard from './pages/CitizenDashboard';
 import HelpCenter from './pages/HelpCenter';
 import AboutDeveloper from './pages/AboutDeveloper';
 import KnowYourLeader from './pages/KnowYourLeader';
+import Features from './pages/Features';
 
 // Layout
 import Navbar from './components/Common/Navbar';
@@ -155,6 +156,7 @@ export default function App() {
             )}
           />
           <Route path="/help" element={<RoleRoute><HelpCenter /></RoleRoute>} />
+          <Route path="/features" element={<RoleRoute><Features /></RoleRoute>} />
           <Route path="/about-developer" element={<RoleRoute><AboutDeveloper /></RoleRoute>} />
           <Route path="/profile" element={<RoleRoute><MyProfile /></RoleRoute>} />
 

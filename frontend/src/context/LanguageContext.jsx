@@ -28,8 +28,16 @@ const TRANSLATIONS = {
     side_public_portal: 'Public Portal',
     side_my_profile: 'My Profile',
     side_help_center: 'Help Center',
+    side_features: 'System Features',
     side_about_developer: 'About Developer',
     side_platform_tagline: 'AI-Powered Governance Intelligence Platform',
+
+    features_title: 'System Features',
+    features_subtitle: 'Explore all capabilities of Jansewa AI across citizen, worker, and leader workflows.',
+    features_category_citizen: 'Citizen Experience',
+    features_category_ops: 'Operations & Workforce',
+    features_category_ai: 'AI Intelligence Engine',
+    features_category_transparency: 'Transparency & Governance',
 
     register_citizen_desk: 'Citizen Desk',
     register_title: 'Register Complaint',
@@ -406,8 +414,16 @@ const TRANSLATIONS = {
     side_public_portal: 'पब्लिक पोर्टल',
     side_my_profile: 'मेरी प्रोफाइल',
     side_help_center: 'हेल्प सेंटर',
+    side_features: 'सिस्टम फीचर्स',
     side_about_developer: 'डेवलपर के बारे में',
     side_platform_tagline: 'एआई आधारित शासन इंटेलिजेंस प्लेटफॉर्म',
+
+    features_title: 'सिस्टम फीचर्स',
+    features_subtitle: 'नागरिक, कार्यकर्ता और नेतृत्व वर्कफ़्लो में Jansewa AI की सभी क्षमताएँ देखें।',
+    features_category_citizen: 'नागरिक अनुभव',
+    features_category_ops: 'ऑपरेशंस और वर्कफोर्स',
+    features_category_ai: 'एआई इंटेलिजेंस इंजन',
+    features_category_transparency: 'पारदर्शिता और शासन',
 
     register_citizen_desk: 'नागरिक डेस्क',
     register_title: 'शिकायत पंजीकरण',

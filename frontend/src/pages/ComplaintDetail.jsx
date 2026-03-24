@@ -4,6 +4,7 @@ import { complaintsAPI, verificationAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
+import { getComplaintDisplayText } from '../utils/complaintText';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -226,7 +227,7 @@ export default function ComplaintDetail() {
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100">Complaint Intelligence</p>
-            <h1 className="text-xl font-bold text-white">{complaint.ai_summary || complaint.raw_text || t('complaint_details_title', 'Complaint Details')}</h1>
+            <h1 className="text-xl font-bold text-white">{getComplaintDisplayText(complaint, t('complaint_details_title', 'Complaint Details'))}</h1>
             <p className="text-sm text-slate-100 mt-1">ID: {complaint.complaint_code || String(complaint.id || '').slice(0, 8)}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -246,7 +247,7 @@ export default function ComplaintDetail() {
           <div className="text-sm font-semibold text-slate-700">{t('complaint_details_title', 'Complaint Details')}</div>
         </div>
 
-        <p className="mt-4 text-sm text-gray-700 leading-relaxed">{complaint.raw_text || complaint.ai_summary || t('complaint_no_text_details', 'No text details provided.')}</p>
+        <p className="mt-4 text-sm text-gray-700 leading-relaxed">{getComplaintDisplayText(complaint, t('complaint_no_text_details', 'No text details provided.'))}</p>
 
         {/* Metadata grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-gray-100">

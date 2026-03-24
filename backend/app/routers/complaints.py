@@ -100,6 +100,12 @@ def _status_notification_text(status: Optional[str]) -> str:
     return mapping.get((status or "").upper(), "Your complaint status has been updated.")
 
 
+def _build_voice_fallback_summary(category_name: Optional[str], ward_number: Optional[int]) -> str:
+    issue_label = (category_name or "civic service").strip().lower()
+    ward_label = f" in Ward {ward_number}" if ward_number else ""
+    return f"Citizen submitted a voice complaint about {issue_label} issue{ward_label}. Field review requested."
+
+
 def _parse_status_audit_payload(value: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     if not value:
         return None, None
@@ -591,6 +597,7 @@ async def create_complaint(
     """Submit a new complaint (text, voice, or image)."""
     resolved_raw_text = (body.raw_text or "").strip() or None
     resolved_language = body.source_language
+    needs_voice_fallback_summary = False
 
     if body.input_type == "voice" and body.raw_audio_url and not resolved_raw_text:
         transcribed_text, detected_language = await _transcribe_audio_data_url(body.raw_audio_url)
@@ -600,7 +607,7 @@ async def create_complaint(
 
     if body.input_type == "voice" and not resolved_raw_text:
         if body.raw_audio_url:
-            resolved_raw_text = "Voice complaint received. Transcription pending."
+            needs_voice_fallback_summary = True
         else:
             raise HTTPException(
                 status_code=400,
@@ -651,6 +658,22 @@ async def create_complaint(
             ward_obj = ward_by_number.scalar_one_or_none()
             if ward_obj:
                 resolved_ward_id = ward_obj.id
+
+    if needs_voice_fallback_summary:
+        resolved_category_name = None
+        resolved_ward_number = None
+
+        if resolved_category_id is not None:
+            category_obj = await db.get(Category, resolved_category_id)
+            if category_obj:
+                resolved_category_name = category_obj.name
+
+        if resolved_ward_id is not None:
+            ward_obj = await db.get(Ward, resolved_ward_id)
+            if ward_obj and ward_obj.ward_number is not None:
+                resolved_ward_number = int(ward_obj.ward_number)
+
+        resolved_raw_text = _build_voice_fallback_summary(resolved_category_name, resolved_ward_number)
 
     # Create or find citizen
     citizen = None

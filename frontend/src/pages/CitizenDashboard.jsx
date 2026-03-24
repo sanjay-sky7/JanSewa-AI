@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { complaintsAPI, publicAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { getComplaintDisplayText } from '../utils/complaintText';
+import { formatComplaintDateTime } from '../utils/dateTime';
 
 const ACTIVE_STATUSES = ['OPEN', 'UNDER_REVIEW', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_PENDING'];
 
@@ -381,13 +383,13 @@ export default function CitizenDashboard() {
                   style={{ animationDelay: `${idx * 70}ms` }}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <p className="line-clamp-1 text-sm font-medium text-gray-900">{item.raw_text || item.ai_summary || t('my_complaint', 'Complaint')}</p>
+                    <p className="line-clamp-1 text-sm font-medium text-gray-900">{getComplaintDisplayText(item, t('my_complaint', 'Complaint'))}</p>
                     <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${toneByStatus(item.status)}`}>
                       {statusLabel(item.status)}
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-                    <span>{new Date(item.created_at).toLocaleString()}</span>
+                    <span>{formatComplaintDateTime(item.created_at)}</span>
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-600">
                       {item.priority_level || 'N/A'}
                     </span>
@@ -420,7 +422,7 @@ export default function CitizenDashboard() {
                     )}
                   </div>
                   <p className="mt-1 text-xs text-gray-700">{note.notification_message}</p>
-                  <p className="mt-1 text-[11px] text-gray-400">{new Date(note.performed_at).toLocaleString()}</p>
+                  <p className="mt-1 text-[11px] text-gray-400">{formatComplaintDateTime(note.performed_at)}</p>
                 </div>
               ))
             )}

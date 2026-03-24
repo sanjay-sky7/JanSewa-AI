@@ -262,8 +262,8 @@ const TRANSLATIONS = {
     social_anonymous: 'anonymous',
 
     comms_loading: 'Loading communications...',
-    comms_title: 'AI Communications',
-    comms_subtitle: 'Generate, approve, and publish governance communications',
+    comms_title: 'Governance Communications',
+    comms_subtitle: 'Generate, approve, and publish communications using Jansewa local model',
     comms_close: 'Close',
     comms_generate_new: '+ Generate New',
     comms_generate_title: 'Generate Communication',
@@ -640,8 +640,8 @@ const TRANSLATIONS = {
     social_anonymous: 'अनाम',
 
     comms_loading: 'संचार लोड हो रहा है...',
-    comms_title: 'एआई संचार',
-    comms_subtitle: 'शासन संचार बनाएं, अनुमोदित करें और प्रकाशित करें',
+    comms_title: 'शासन संचार',
+    comms_subtitle: 'जनसेवा लोकल मॉडल से शासन संचार बनाएं, अनुमोदित करें और प्रकाशित करें',
     comms_close: 'बंद करें',
     comms_generate_new: '+ नया बनाएं',
     comms_generate_title: 'संचार बनाएं',

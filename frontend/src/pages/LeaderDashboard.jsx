@@ -8,6 +8,7 @@ import SentimentChart from '../components/Dashboard/SentimentChart';
 import AlertsPanel from '../components/Dashboard/AlertsPanel';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import { useLanguage } from '../context/LanguageContext';
+import { getComplaintDisplayText } from '../utils/complaintText';
 
 const WORKER_VISIBLE_STATUS_LABELS = {
   IN_PROGRESS: 'Working on it',
@@ -175,7 +176,7 @@ export default function LeaderDashboard() {
                   onClick={() => navigate(`/complaints/${item.id}`)}
                 >
                   <span className="complaint-chip-priority">{item.priority_level || 'LOW'}</span>
-                  <span className="complaint-chip-text">{item.ai_summary || item.raw_text || t('queue_complaint_fallback', 'Complaint')}</span>
+                  <span className="complaint-chip-text">{getComplaintDisplayText(item, t('queue_complaint_fallback', 'Complaint'))}</span>
                   <span className="complaint-chip-status">{formatLeaderStatus(item.status, t)}</span>
                 </button>
               ))}

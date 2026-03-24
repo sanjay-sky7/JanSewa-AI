@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { complaintsAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { getComplaintDisplayText } from '../utils/complaintText';
 
 const STATUS_OPTIONS = [
   'OPEN',
@@ -248,7 +249,7 @@ export default function ManageComplaints() {
                         {c.complaint_code && (
                           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{c.complaint_code}</p>
                         )}
-                        <p className="line-clamp-2 text-gray-900">{c.raw_text || (c.input_type === 'voice' ? 'Voice file uploaded. Transcription pending.' : t('manage_no_text', 'No text summary available'))}</p>
+                        <p className="line-clamp-2 text-gray-900">{getComplaintDisplayText(c, t('manage_no_text', 'No text summary available'))}</p>
                         <Link to={`/complaints/${c.id}`} className="mt-1 inline-block text-xs font-semibold text-primary-700 hover:underline">
                           {t('manage_open_details', 'Open details')}
                         </Link>

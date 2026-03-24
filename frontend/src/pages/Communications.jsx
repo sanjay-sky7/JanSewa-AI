@@ -3,7 +3,7 @@ import { communicationsAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 
-const TYPE_OPTIONS = ['ACKNOWLEDGMENT', 'PROGRESS', 'COMPLETION', 'CRISIS_RESPONSE', 'WEEKLY_DIGEST'];
+const TYPE_OPTIONS = ['ACKNOWLEDGMENT', 'PROGRESS', 'COMPLETION', 'CRISIS_RESPONSE', 'WEEKLY_DIGEST', 'ANNOUNCEMENT'];
 const FORMAT_OPTIONS = ['whatsapp', 'social_media', 'official_notice'];
 const STATUS_FILTER_OPTIONS = ['ALL', 'DRAFT', 'APPROVED', 'PUBLISHED'];
 
@@ -13,6 +13,7 @@ const TYPE_LABELS = {
   COMPLETION: 'Completion Note',
   CRISIS_RESPONSE: 'Crisis Response',
   WEEKLY_DIGEST: 'Weekly Digest',
+  ANNOUNCEMENT: 'Ward Announcement',
 };
 
 const FORMAT_LABELS = {
@@ -20,6 +21,28 @@ const FORMAT_LABELS = {
   social_media: 'Social Media',
   official_notice: 'Official Notice',
 };
+
+function getApiErrorMessage(err, fallback) {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+
+  if (Array.isArray(detail) && detail.length) {
+    const first = detail[0];
+    if (typeof first === 'string') return first;
+    if (first?.msg) return first.msg;
+  }
+
+  if (detail && typeof detail === 'object') {
+    if (detail.msg) return detail.msg;
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+}
 
 export default function Communications() {
   const { t } = useLanguage();
@@ -31,7 +54,12 @@ export default function Communications() {
     complaint_id: '',
     comm_type: 'ACKNOWLEDGMENT',
     format: 'whatsapp',
+    announcement_title: '',
+    announcement_message: '',
+    announcement_scheduled_for: '',
+    announcement_duration_hours: '',
   });
+  const [formError, setFormError] = useState('');
   const [generatedContent, setGeneratedContent] = useState(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
@@ -57,13 +85,34 @@ export default function Communications() {
 
   const handleGenerate = async (e) => {
     e.preventDefault();
+    setFormError('');
+
+    const payload = {
+      complaint_id: form.complaint_id?.trim() || null,
+      comm_type: form.comm_type,
+      format: form.format,
+    };
+
+    if (form.comm_type === 'ANNOUNCEMENT') {
+      if (!form.announcement_message?.trim()) {
+        setFormError('Announcement details are required.');
+        return;
+      }
+      payload.announcement_title = form.announcement_title?.trim() || 'Ward Public Announcement';
+      payload.announcement_message = form.announcement_message.trim();
+      payload.announcement_scheduled_for = form.announcement_scheduled_for?.trim() || null;
+      payload.announcement_duration_hours = form.announcement_duration_hours
+        ? Number(form.announcement_duration_hours)
+        : null;
+    }
+
     setGenerating(true);
     try {
-      const { data } = await communicationsAPI.generate(form);
+      const { data } = await communicationsAPI.generate(payload);
       setGeneratedContent(data);
       await loadComms();
     } catch (err) {
-      alert(err.response?.data?.detail || t('comms_generation_failed', 'Generation failed'));
+      setFormError(getApiErrorMessage(err, t('comms_generation_failed', 'Generation failed')));
     } finally {
       setGenerating(false);
     }
@@ -105,6 +154,11 @@ export default function Communications() {
       {showForm && (
         <form onSubmit={handleGenerate} className="card p-6 space-y-4 border border-cyan-100">
           <h2 className="text-lg font-semibold">{t('comms_generate_title', 'Generate Communication')}</h2>
+          {formError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formError}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('comms_complaint_id_optional', 'Complaint ID (optional)')}</label>
@@ -140,6 +194,53 @@ export default function Communications() {
                 ))}
               </select>
             </div>
+
+            {form.comm_type === 'ANNOUNCEMENT' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Announcement title</label>
+                  <input
+                    type="text"
+                    value={form.announcement_title}
+                    onChange={(e) => setForm({ ...form, announcement_title: e.target.value })}
+                    className="premium-input w-full rounded-xl px-3 py-2 text-sm"
+                    placeholder="Power supply interruption notice"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Scheduled for</label>
+                  <input
+                    type="text"
+                    value={form.announcement_scheduled_for}
+                    onChange={(e) => setForm({ ...form, announcement_scheduled_for: e.target.value })}
+                    className="premium-input w-full rounded-xl px-3 py-2 text-sm"
+                    placeholder="29 Mar 2026, 11:00 AM"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Announcement details</label>
+                  <textarea
+                    rows={4}
+                    value={form.announcement_message}
+                    onChange={(e) => setForm({ ...form, announcement_message: e.target.value })}
+                    className="premium-input w-full rounded-xl px-3 py-2 text-sm"
+                    placeholder="On 29 March, there will be a planned power supply shutdown for 5 hours due to transformer maintenance in Ward 3."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (hours)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={72}
+                    value={form.announcement_duration_hours}
+                    onChange={(e) => setForm({ ...form, announcement_duration_hours: e.target.value })}
+                    className="premium-input w-full rounded-xl px-3 py-2 text-sm"
+                    placeholder="5"
+                  />
+                </div>
+              </>
+            )}
           </div>
           <button
             type="submit"
@@ -147,7 +248,7 @@ export default function Communications() {
             className="rounded-xl bg-gradient-to-r from-[#ff9933] via-[#0b3a86] to-[#138808] text-white px-6 py-2.5 text-sm font-semibold
               hover:bg-primary-700 disabled:opacity-50 transition-colors"
           >
-            {generating ? t('comms_generating', 'Generating with AI...') : t('comms_generate', 'Generate')}
+            {generating ? t('comms_generating', 'Generating communication...') : t('comms_generate', 'Generate')}
           </button>
         </form>
       )}
@@ -213,7 +314,7 @@ export default function Communications() {
                       {c.status}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700 line-clamp-2">{c.content?.slice(0, 200)}</p>
+                  <p className="text-sm text-gray-700 line-clamp-2">{(c.content_english || '').slice(0, 200)}</p>
                   <p className="text-xs text-gray-400 mt-1">{new Date(c.created_at).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-2">

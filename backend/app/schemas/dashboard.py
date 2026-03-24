@@ -131,12 +131,16 @@ class SocialAlert(BaseModel):
 # ── Communications ───────────────────────────────────────
 
 class CommunicationGenerate(BaseModel):
-    complaint_id: Optional[uuid.UUID] = None
+    complaint_id: Optional[str] = None
     comm_type: str = Field(
         ...,
-        pattern="^(ACKNOWLEDGMENT|PROGRESS|COMPLETION|CRISIS_RESPONSE|WEEKLY_DIGEST)$",
+        pattern="^(ACKNOWLEDGMENT|PROGRESS|COMPLETION|CRISIS_RESPONSE|WEEKLY_DIGEST|ANNOUNCEMENT)$",
     )
     format: str = Field(default="whatsapp", pattern="^(whatsapp|social_media|official_notice)$")
+    announcement_title: Optional[str] = None
+    announcement_message: Optional[str] = None
+    announcement_scheduled_for: Optional[str] = None
+    announcement_duration_hours: Optional[int] = Field(default=None, ge=1, le=72)
 
     @field_validator("comm_type", mode="before")
     @classmethod
@@ -149,6 +153,8 @@ class CommunicationGenerate(BaseModel):
             "EMERGENCY_ALERT": "CRISIS_RESPONSE",
             "PROGRESS_REPORT": "PROGRESS",
             "ACK": "ACKNOWLEDGMENT",
+            "NOTICE": "ANNOUNCEMENT",
+            "PUBLIC_NOTICE": "ANNOUNCEMENT",
         }
         return aliases.get(raw, raw)
 
@@ -162,6 +168,22 @@ class CommunicationGenerate(BaseModel):
             "social": "social_media",
         }
         return aliases.get(raw, raw)
+
+    @field_validator("complaint_id", mode="before")
+    @classmethod
+    def normalize_complaint_id(cls, value):
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
+
+    @field_validator("announcement_title", "announcement_message", "announcement_scheduled_for", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value):
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
 
 
 class CommunicationOut(BaseModel):

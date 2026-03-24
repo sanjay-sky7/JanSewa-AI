@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { complaintsAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
+import { getComplaintDisplayText } from '../utils/complaintText';
 
 export default function WorkerDashboard() {
   const navigate = useNavigate();
@@ -131,7 +132,7 @@ export default function WorkerDashboard() {
               ) : (
                 items.map((c) => (
                   <tr key={c.id}>
-                    <td className="px-3 py-2 text-slate-900">{c.ai_summary || c.raw_text || 'Complaint'}</td>
+                    <td className="px-3 py-2 text-slate-900">{getComplaintDisplayText(c, 'Complaint')}</td>
                     <td className="px-3 py-2 text-slate-700">{c.ward?.ward_name || t('common_na', 'N/A')}</td>
                     <td className="px-3 py-2 text-slate-700">{c.category?.name || t('common_na', 'N/A')}</td>
                     <td className="px-3 py-2 text-slate-700">{(c.status || '').replaceAll('_', ' ')}</td>

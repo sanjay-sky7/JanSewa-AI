@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { complaintsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { getComplaintDisplayText } from '../utils/complaintText';
+import { formatComplaintDateTime } from '../utils/dateTime';
 
 const STATUS_FLOW = [
   'OPEN',
@@ -264,7 +266,7 @@ export default function MyComplaints() {
                   </Link>
                 </div>
                 <p className="mt-1 text-xs text-gray-700">{note.notification_message}</p>
-                <p className="mt-1 text-[11px] text-gray-400">{new Date(note.performed_at).toLocaleString()}</p>
+                <p className="mt-1 text-[11px] text-gray-400">{formatComplaintDateTime(note.performed_at)}</p>
               </div>
             ))
           )}
@@ -283,8 +285,8 @@ export default function MyComplaints() {
               <article key={item.id} className="my-complaint-item card p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{item.raw_text || item.ai_summary || t('my_complaint', 'Complaint')}</p>
-                    <p className="mt-1 text-xs text-gray-500">{t('complaint_filed_on', 'Filed on')} {new Date(item.created_at).toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-gray-900">{getComplaintDisplayText(item, t('my_complaint', 'Complaint'))}</p>
+                    <p className="mt-1 text-xs text-gray-500">{t('complaint_filed_on', 'Filed on')} {formatComplaintDateTime(item.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusTone(item.status)}`}>
@@ -308,7 +310,7 @@ export default function MyComplaints() {
                           {latestFeedbackByComplaint[item.id].notification_message}
                         </p>
                         <p className="mt-1 text-[11px] text-blue-700/80">
-                          {new Date(latestFeedbackByComplaint[item.id].performed_at).toLocaleString()}
+                          {formatComplaintDateTime(latestFeedbackByComplaint[item.id].performed_at)}
                         </p>
                       </>
                     ) : (

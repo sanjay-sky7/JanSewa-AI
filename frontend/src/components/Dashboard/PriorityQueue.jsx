@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
+import { getComplaintDisplayText } from '../../utils/complaintText';
 
 const priorityColors = {
   CRITICAL: 'badge-critical',
@@ -54,7 +55,7 @@ export default function PriorityQueue({ complaints = [] }) {
               {idx + 1}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{c.ai_summary || c.raw_text || t('queue_complaint_fallback', 'Complaint')}</p>
+              <p className="text-sm font-medium text-gray-900 truncate">{getComplaintDisplayText(c, t('queue_complaint_fallback', 'Complaint'))}</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {(c.ward?.ward_name || t('queue_ward_na', 'Ward N/A'))} • {(c.category?.name || t('queue_category_na', 'Category N/A'))}
               </p>

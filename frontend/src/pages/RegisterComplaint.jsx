@@ -3,6 +3,8 @@ import exifr from 'exifr';
 import { complaintsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { getComplaintDisplayText } from '../utils/complaintText';
+import { formatComplaintDateTime } from '../utils/dateTime';
 
 const INPUT_TYPES = [
   { key: 'text', label: 'Text', tone: 'from-[#0a2a63] to-[#2563eb]' },
@@ -574,12 +576,12 @@ export default function RegisterComplaint() {
             latestComplaints.map((item) => (
               <div key={item.id} className="register-status-item rounded-xl border border-blue-100 bg-white p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="line-clamp-1 text-sm font-medium text-gray-900">{item.raw_text || 'Complaint record'}</p>
+                  <p className="line-clamp-1 text-sm font-medium text-gray-900">{getComplaintDisplayText(item, 'Complaint record')}</p>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{item.status}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
                   <span>Priority: {item.priority_level || 'N/A'}</span>
-                  <span>{new Date(item.created_at).toLocaleString()}</span>
+                  <span>{formatComplaintDateTime(item.created_at)}</span>
                 </div>
               </div>
             ))

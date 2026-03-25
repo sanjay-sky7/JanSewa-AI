@@ -108,6 +108,35 @@ Note:
 - API root is available at http://localhost:8000/ and health check at http://localhost:8000/api/health.
 - Citizens now receive SMS/WhatsApp confirmation when a complaint is registered if MSG91 variables are configured.
 
+### Demo Citizen Credentials (Ward-Wise)
+
+Use these pre-seeded citizen accounts to verify ward-specific behavior (complaint visibility, assignment flow, and dashboards). All demo citizens use the same password: `password123`.
+
+| Ward | Name | Email (Login) | Mobile / Phone |
+|------|------|----------------|----------------|
+| 1 | Aarav Mehta | citizen.w01@jansewa.gov | +919800000001 |
+| 2 | Isha Verma | citizen.w02@jansewa.gov | +919800000002 |
+| 3 | Rohan Singh | citizen.w03@jansewa.gov | +919800000003 |
+| 4 | Kriti Sharma | citizen.w04@jansewa.gov | +919800000004 |
+| 5 | Aditya Yadav | citizen.w05@jansewa.gov | +919800000005 |
+| 6 | Sneha Gupta | citizen.w06@jansewa.gov | +919800000006 |
+| 7 | Nikhil Tiwari | citizen.w07@jansewa.gov | +919800000007 |
+| 8 | Pallavi Patel | citizen.w08@jansewa.gov | +919800000008 |
+| 9 | Yash Chauhan | citizen.w09@jansewa.gov | +919800000009 |
+| 10 | Ritika Joshi | citizen.w10@jansewa.gov | +919800000010 |
+| 11 | Harsh Agarwal | citizen.w11@jansewa.gov | +919800000011 |
+| 12 | Neha Dubey | citizen.w12@jansewa.gov | +919800000012 |
+| 13 | Karan Srivastava | citizen.w13@jansewa.gov | +919800000013 |
+| 14 | Ananya Mishra | citizen.w14@jansewa.gov | +919800000014 |
+| 15 | Devansh Kumar | citizen.w15@jansewa.gov | +919800000015 |
+
+If your database was already seeded earlier, run this once to upsert these users:
+
+```bash
+cd backend
+python -m seed_data
+```
+
 Data persistence across different machines:
 - By default, Docker uses the local `postgres_data` volume on each machine, so users/complaints created on Machine A do not automatically appear on Machine B.
 - To share the same accounts and complaints across systems, point both machines to the same PostgreSQL instance via `DATABASE_URL` / `DATABASE_SYNC_URL`.

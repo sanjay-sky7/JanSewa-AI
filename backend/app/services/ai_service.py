@@ -364,6 +364,18 @@ def _map_vision_tokens_to_category(tokens: list[str]) -> tuple[str, float]:
             "hospital",
             "clinic",
             "medical",
+            "healthcare",
+            "health care",
+            "patient",
+            "ward",
+            "icu",
+            "emergency room",
+            "stretcher",
+            "hospital bed",
+            "bed",
+            "nurse",
+            "doctor",
+            "medicine",
             "sanitary",
             "disease",
             "mosquito",
@@ -538,6 +550,16 @@ def _category_from_filename(filename: str) -> Optional[str]:
         return "Road/Pothole"
     if any(token in filename for token in ["electric", "bijli", "power", "wire", "streetlight", "transformer"]):
         return "Electricity"
+    if any(token in filename for token in ["hospital", "clinic", "medical", "health", "patient", "icu", "bed"]):
+        return "Health"
+    if any(token in filename for token in ["garbage", "waste", "trash", "kachra", "kooda"]):
+        return "Garbage"
+    if any(token in filename for token in ["drain", "sewer", "sewage", "manhole", "naali", "nali"]):
+        return "Drainage"
+    if any(token in filename for token in ["water", "tap", "pipeline", "pipe", "leak"]):
+        return "Water Supply"
+    if any(token in filename for token in ["fire", "accident", "danger", "hazard", "unsafe"]):
+        return "Public Safety"
     return None
 
 

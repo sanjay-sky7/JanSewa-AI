@@ -227,30 +227,59 @@ export default function RegisterComplaint() {
 
     try {
       const gps = await exifr.gps(file);
-      if (gps?.latitude && gps?.longitude) {
-        setGeoTag({ latitude: gps.latitude, longitude: gps.longitude });
+      const lat = gps?.latitude;
+      const lng = gps?.longitude;
+
+      if (
+        Number.isFinite(lat)
+        && Number.isFinite(lng)
+        && lat >= -90
+        && lat <= 90
+        && lng >= -180
+        && lng <= 180
+      ) {
+        setGeoTag({ latitude: lat, longitude: lng });
         setGeoNote('Geo-tag detected from image metadata.');
       } else {
-        setGeoNote('No GPS metadata found in image.');
+        setGeoNote('No GPS metadata found in image. Internet-downloaded images usually lose location tags. Use current location or capture image with phone location ON.');
       }
     } catch {
       setGeoNote('Could not read geo-tag from image metadata.');
     }
   }
 
-  function detectCurrentLocation() {
-    if (!navigator.geolocation) {
-      setGeoNote('Geolocation is not supported in this browser.');
-      return;
-    }
+  function requestCurrentLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported in this browser.'));
+        return;
+      }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setGeoTag({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setGeoNote('Using current device location for Geo-Tagged Work Verification.');
-      },
-      () => setGeoNote('Location permission denied or unavailable.')
-    );
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        () => reject(new Error('Location permission denied or unavailable.')),
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+    });
+  }
+
+  async function detectCurrentLocation() {
+    try {
+      const coords = await requestCurrentLocation();
+      setGeoTag(coords);
+      setGeoNote('Using current device location for Geo-Tagged Work Verification.');
+    } catch (err) {
+      setGeoNote(err.message || 'Location permission denied or unavailable.');
+    }
   }
 
   async function loadLatestStatus(phoneValue) {
@@ -293,7 +322,30 @@ export default function RegisterComplaint() {
       }
 
       if (inputType === 'image' && imageFile) {
+        if (!payload.raw_text && imageFile?.name) {
+          const nameHint = imageFile.name
+            .replace(/\.[a-zA-Z0-9]+$/, '')
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (nameHint) {
+            payload.raw_text = `Image file hint: ${nameHint}`;
+          }
+        }
+
         payload.raw_image_url = await toDataUrl(imageFile);
+
+        if (!geoTag) {
+          try {
+            const currentCoords = await requestCurrentLocation();
+            setGeoTag(currentCoords);
+            setGeoNote('No image GPS found. Using current device location as fallback.');
+            payload.geo_latitude = currentCoords.latitude;
+            payload.geo_longitude = currentCoords.longitude;
+          } catch {
+            // Keep submission flowing; backend will apply ward-level fallback routing.
+          }
+        }
       }
 
       if (geoTag?.latitude && geoTag?.longitude) {

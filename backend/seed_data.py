@@ -122,6 +122,7 @@ def seed():
                     "LEADER",
                     "Administration",
                     ward_number,
+                    None,
                 )
             )
 
@@ -156,19 +157,50 @@ def seed():
                         "WORKER",
                         department,
                         ward_number,
+                        None,
                     )
                 )
 
         # Cross-ward operations users.
         users_data.extend([
-            ("Sunny Kumar", "sunny.worker@jansewa.gov", "WORKER", "Roads Department", 1),
-            ("Water Department Head", "dh.water@jansewa.gov", "DEPARTMENT_HEAD", "Water Department", None),
-            ("Roads Department Head", "dh.roads@jansewa.gov", "DEPARTMENT_HEAD", "Roads Department", None),
-            ("Health Department Head", "dh.health@jansewa.gov", "DEPARTMENT_HEAD", "Health Department", None),
-            ("Public Works Officer", "officer.publicworks@jansewa.gov", "OFFICER", "Public Works", None),
-            ("Roads Engineer", "engineer.roads@jansewa.gov", "ENGINEER", "Roads Department", None),
-            ("Admin User", "admin@jansewa.gov", "ADMIN", "IT", None),
+            ("Sunny Kumar", "sunny.worker@jansewa.gov", "WORKER", "Roads Department", 1, None),
+            ("Water Department Head", "dh.water@jansewa.gov", "DEPARTMENT_HEAD", "Water Department", None, None),
+            ("Roads Department Head", "dh.roads@jansewa.gov", "DEPARTMENT_HEAD", "Roads Department", None, None),
+            ("Health Department Head", "dh.health@jansewa.gov", "DEPARTMENT_HEAD", "Health Department", None, None),
+            ("Public Works Officer", "officer.publicworks@jansewa.gov", "OFFICER", "Public Works", None, None),
+            ("Roads Engineer", "engineer.roads@jansewa.gov", "ENGINEER", "Roads Department", None, None),
+            ("Admin User", "admin@jansewa.gov", "ADMIN", "IT", None, None),
         ])
+
+        # Citizen login users for ward-wise demo/testing.
+        citizen_demo_users = [
+            ("Aarav Mehta", "citizen.w01@jansewa.gov", "+919800000001", 1),
+            ("Isha Verma", "citizen.w02@jansewa.gov", "+919800000002", 2),
+            ("Rohan Singh", "citizen.w03@jansewa.gov", "+919800000003", 3),
+            ("Kriti Sharma", "citizen.w04@jansewa.gov", "+919800000004", 4),
+            ("Aditya Yadav", "citizen.w05@jansewa.gov", "+919800000005", 5),
+            ("Sneha Gupta", "citizen.w06@jansewa.gov", "+919800000006", 6),
+            ("Nikhil Tiwari", "citizen.w07@jansewa.gov", "+919800000007", 7),
+            ("Pallavi Patel", "citizen.w08@jansewa.gov", "+919800000008", 8),
+            ("Yash Chauhan", "citizen.w09@jansewa.gov", "+919800000009", 9),
+            ("Ritika Joshi", "citizen.w10@jansewa.gov", "+919800000010", 10),
+            ("Harsh Agarwal", "citizen.w11@jansewa.gov", "+919800000011", 11),
+            ("Neha Dubey", "citizen.w12@jansewa.gov", "+919800000012", 12),
+            ("Karan Srivastava", "citizen.w13@jansewa.gov", "+919800000013", 13),
+            ("Ananya Mishra", "citizen.w14@jansewa.gov", "+919800000014", 14),
+            ("Devansh Kumar", "citizen.w15@jansewa.gov", "+919800000015", 15),
+        ]
+        for name, email, phone, ward_number in citizen_demo_users:
+            users_data.append(
+                (
+                    name,
+                    email,
+                    "CITIZEN",
+                    None,
+                    ward_number,
+                    phone,
+                )
+            )
         ward_id_by_number = {
             w.ward_number: w.id
             for w in db.query(Ward).all()
@@ -180,7 +212,7 @@ def seed():
         }
         seeded_users = 0
         updated_users = 0
-        for name, email, role, dept, wid in users_data:
+        for name, email, role, dept, wid, phone in users_data:
             existing_user = existing_users_by_email.get(email)
             resolved_ward_id = ward_id_by_number.get(wid) if wid is not None else None
 
@@ -198,6 +230,9 @@ def seed():
                 if existing_user.ward_id != resolved_ward_id:
                     existing_user.ward_id = resolved_ward_id
                     changed = True
+                if phone is not None and existing_user.phone != phone:
+                    existing_user.phone = phone
+                    changed = True
                 if changed:
                     updated_users += 1
                 continue
@@ -209,7 +244,7 @@ def seed():
                 department=dept,
                 ward_id=resolved_ward_id,
                 password_hash=pw,
-                phone=f"+9198{random.randint(10000000,99999999)}",
+                phone=phone or f"+9198{random.randint(10000000,99999999)}",
             ))
             seeded_users += 1
 

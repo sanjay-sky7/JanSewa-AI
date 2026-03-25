@@ -6,9 +6,9 @@ export function parseServerDateTime(value) {
   const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw);
   const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
 
-  const direct = new Date(normalized);
-  if (!Number.isNaN(direct.getTime())) {
-    return direct;
+  if (hasTz) {
+    const direct = new Date(normalized);
+    return Number.isNaN(direct.getTime()) ? null : direct;
   }
 
   // Fallback for naive timestamps like "YYYY-MM-DD HH:mm:ss".
@@ -16,9 +16,15 @@ export function parseServerDateTime(value) {
   if (!match) return null;
 
   const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
-  const parsed = hasTz
-    ? new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`)
-    : new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  // Backend stores naive UTC timestamps; interpret as UTC to avoid local-time drift.
+  const parsed = new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  ));
 
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

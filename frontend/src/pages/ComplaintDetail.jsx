@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import { getComplaintDisplayText } from '../utils/complaintText';
+import { formatComplaintDateTime } from '../utils/dateTime';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -80,6 +81,25 @@ export default function ComplaintDetail() {
       }
     }
     load();
+  }, [id]);
+
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const [{ data: latestComplaint }, verificationRes] = await Promise.all([
+          complaintsAPI.get(id),
+          verificationAPI.get(id).catch(() => null),
+        ]);
+        setComplaint(latestComplaint);
+        if (verificationRes?.data) {
+          setVerification(verificationRes.data);
+        }
+      } catch {
+        // Silent refresh failure; manual refresh/navigation still available.
+      }
+    }, 15000);
+
+    return () => clearInterval(timer);
   }, [id]);
 
   useEffect(() => {
@@ -256,7 +276,7 @@ export default function ComplaintDetail() {
           <MetaItem label={t('complaint_meta_priority_score', 'Priority Score')} value={complaint.final_priority_score?.toFixed?.(2)} />
           <MetaItem label={t('complaint_meta_sentiment', 'Sentiment')} value={complaint.sentiment_score} />
           <MetaItem label={t('complaint_meta_source', 'Source')} value={complaint.input_type} />
-          <MetaItem label={t('complaint_meta_created', 'Created')} value={new Date(complaint.created_at).toLocaleString()} />
+          <MetaItem label={t('complaint_meta_created', 'Created')} value={formatComplaintDateTime(complaint.created_at)} />
           <MetaItem label={t('complaint_meta_assigned_to', 'Assigned To')} value={complaint.assignee?.name || '—'} />
           <MetaItem label={t('complaint_meta_ai_duplicate', 'AI Duplicate')} value={complaint.is_duplicate ? t('complaint_yes', 'Yes') : t('complaint_no', 'No')} />
           <MetaItem label={t('complaint_meta_detected_location', 'Detected Location')} value={complaint.ai_location || t('common_na', 'N/A')} />
@@ -347,7 +367,7 @@ export default function ComplaintDetail() {
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColors[complaint.status] || 'bg-slate-100 text-slate-700'}`}>
               {statusLabel(complaint.status)}
             </span>
-            <span className="text-xs text-slate-500">Updated: {new Date(complaint.updated_at).toLocaleString()}</span>
+            <span className="text-xs text-slate-500">Updated: {formatComplaintDateTime(complaint.updated_at)}</span>
           </div>
           {assignError && (
             <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -500,7 +520,7 @@ function MetaItem({ label, value }) {
   return (
     <div>
       <p className="text-xs text-gray-400">{label}</p>
-      <p className="text-sm font-medium text-gray-900">{value || '—'}</p>
+      <p className="text-sm font-medium text-gray-900">{value ?? '—'}</p>
     </div>
   );
 }

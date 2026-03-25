@@ -7,10 +7,10 @@ import json
 import os
 import base64
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
 from sqlalchemy import select, func, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -226,6 +226,53 @@ def _normalize_category_name(name: str) -> str:
     return normalized.replace(" / ", "/")
 
 
+def _infer_category_name_from_image_analysis(image_ai: dict) -> Optional[str]:
+    """Infer category from image analysis text/labels when primary category is weak."""
+    if not image_ai:
+        return None
+
+    preferred = _normalize_category_name(image_ai.get("category") or "")
+    if preferred and preferred not in {"other", "general", "other issue"}:
+        return image_ai.get("category")
+
+    tokens = []
+    for key in ("issue_description", "official_summary"):
+        value = image_ai.get(key)
+        if value:
+            tokens.append(str(value).lower())
+
+    labels = image_ai.get("vision_labels") or []
+    if isinstance(labels, list):
+        tokens.extend([str(label).lower() for label in labels if label])
+
+    haystack = " ".join(tokens)
+    if not haystack:
+        return None
+
+    category_signals = {
+        "Health": [
+            "hospital", "clinic", "medical", "patient", "ward", "icu", "bed", "stretcher", "medicine",
+            "doctor", "nurse", "operation theatre", "emergency room",
+        ],
+        "Garbage": ["garbage", "trash", "waste", "litter", "dump", "debris", "kooda", "kachra"],
+        "Drainage": ["drain", "drainage", "sewer", "sewage", "waterlogging", "gutter", "manhole"],
+        "Road/Pothole": ["road", "street", "asphalt", "pothole", "crack", "sidewalk", "divider"],
+        "Electricity": ["electric", "electricity", "wire", "cable", "pole", "street light", "transformer", "power"],
+        "Water Supply": ["water", "tap", "pipeline", "pipe", "leak", "tank", "valve"],
+        "Public Safety": ["fire", "hazard", "danger", "accident", "smoke", "collapse", "unsafe"],
+    }
+
+    best_category = None
+    best_score = 0
+    for category_name, signals in category_signals.items():
+        score = sum(1 for signal in signals if signal in haystack)
+        if score > best_score:
+            best_score = score
+            best_category = category_name
+
+    return best_category if best_score > 0 else None
+
+
 async def _resolve_category_id_by_name(db: AsyncSession, name: Optional[str]) -> Optional[int]:
     if not name:
         return None
@@ -236,9 +283,35 @@ async def _resolve_category_id_by_name(db: AsyncSession, name: Optional[str]) ->
         "road / pothole": "road/pothole",
         "road damage": "road/pothole",
         "pothole": "road/pothole",
+        "roads": "road/pothole",
+        "roads department": "road/pothole",
         "electricity problem": "electricity",
         "electricity issue": "electricity",
         "power": "electricity",
+        "power supply": "electricity",
+        "water": "water supply",
+        "water issue": "water supply",
+        "water leak": "water supply",
+        "sewage": "drainage",
+        "sewer": "drainage",
+        "sanitation": "garbage",
+        "waste": "garbage",
+        "medical": "health",
+        "medical issue": "health",
+        "health medical": "health",
+        "health / medical": "health",
+        "health/medical": "health",
+        "health and medical": "health",
+        "healthcare": "health",
+        "hospital clinic": "health",
+        "hospital / clinic": "health",
+        "hospital/clinic": "health",
+        "hospital": "health",
+        "hospital issue": "health",
+        "clinic": "health",
+        "public health": "health",
+        "safety": "public safety",
+        "security": "public safety",
     }
     normalized = aliases.get(normalized, normalized)
 
@@ -272,6 +345,64 @@ async def _resolve_created_complaint_ids_by_user(db: AsyncSession, user_id: Opti
         )
     )
     return [row[0] for row in created_result.all() if row[0] is not None]
+
+
+async def _find_probable_duplicate_complaint(
+    db: AsyncSession,
+    text: Optional[str],
+    ward_id: Optional[int],
+    category_id: Optional[int],
+) -> Optional[Complaint]:
+    """Find a likely duplicate among recent active complaints in the same ward/category scope."""
+    from app.services.ai_service import check_duplicate
+
+    candidate_text = (text or "").strip()
+    if len(candidate_text) < 20:
+        return None
+
+    recent_cutoff = datetime.utcnow() - timedelta(days=14)
+    active_statuses = ["OPEN", "UNDER_REVIEW", "ASSIGNED", "IN_PROGRESS", "VERIFICATION_PENDING"]
+
+    stmt = _complaint_query().where(
+        Complaint.created_at >= recent_cutoff,
+        Complaint.status.in_(active_statuses),
+    )
+    if ward_id is not None:
+        stmt = stmt.where(Complaint.ward_id == ward_id)
+    if category_id is not None:
+        stmt = stmt.where(Complaint.category_id == category_id)
+
+    stmt = stmt.order_by(desc(Complaint.created_at)).limit(50)
+    existing_items = (await db.execute(stmt)).scalars().all()
+    if not existing_items:
+        return None
+
+    normalized_candidate = " ".join(candidate_text.lower().split())
+    for item in existing_items:
+        existing_text = (item.raw_text or item.ai_summary or "").strip()
+        normalized_existing = " ".join(existing_text.lower().split())
+        if normalized_existing and normalized_existing == normalized_candidate:
+            return item
+
+    existing_summaries = []
+    by_id = {}
+    for item in existing_items:
+        summary = (item.raw_text or item.ai_summary or "").strip()
+        if not summary:
+            continue
+        item_id = str(item.id)
+        by_id[item_id] = item
+        existing_summaries.append({"id": item_id, "summary": summary})
+
+    if not existing_summaries:
+        return None
+
+    duplicate = await check_duplicate(candidate_text, existing_summaries)
+    if not duplicate:
+        return None
+
+    duplicate_id = duplicate.get("duplicate_of_id")
+    return by_id.get(str(duplicate_id)) if duplicate_id else None
 
 
 def _build_complaint_context(complaint: Complaint) -> dict:
@@ -508,22 +639,28 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
     from app.services.ai_service import extract_complaint_details
     from app.services.priority_service import calculate_priority_score
 
-    if not complaint.raw_text:
-        return
-
     try:
-        # Step 1: NLP extraction
-        ai_data = await extract_complaint_details(
-            complaint.raw_text,
-            complaint.source_language or "auto",
-            allow_external_enhancement=False,
-        )
+        ai_data = {}
 
-        complaint.ai_summary = ai_data.get("summary_english", "")
-        if ai_data.get("location_text"):
-            complaint.ai_location = ai_data.get("location_text")
-        complaint.ai_duration_days = ai_data.get("duration_days")
-        complaint.ai_category_confidence = ai_data.get("category_confidence", 0)
+        # Step 1: NLP extraction
+        if complaint.raw_text:
+            ai_data = await extract_complaint_details(
+                complaint.raw_text,
+                complaint.source_language or "auto",
+                allow_external_enhancement=False,
+            )
+
+            complaint.ai_summary = ai_data.get("summary_english", "")
+            if ai_data.get("location_text"):
+                complaint.ai_location = ai_data.get("location_text")
+            complaint.ai_duration_days = ai_data.get("duration_days")
+            complaint.ai_category_confidence = ai_data.get("category_confidence", 0)
+        else:
+            # Image-only complaints can lack text; still run deterministic scoring.
+            if not complaint.ai_summary:
+                complaint.ai_summary = "Image-based complaint submitted by citizen"
+            complaint.ai_duration_days = complaint.ai_duration_days or 1
+            complaint.ai_category_confidence = complaint.ai_category_confidence or 0
 
         # Improve text complaint location enrichment using ward KB lookup.
         inferred_ward_id = complaint.ward_id
@@ -566,6 +703,22 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
             selected_category = await db.get(Category, complaint.category_id)
             if selected_category:
                 cat_name = selected_category.name
+
+            ai_suggested_category = ai_data.get("category")
+            ai_confidence = float(ai_data.get("category_confidence") or 0)
+            selected_normalized = _normalize_category_name(cat_name)
+            ai_normalized = _normalize_category_name(ai_suggested_category or "")
+            if (
+                selected_normalized in {"other", "general", "other issue"}
+                and ai_normalized not in {"", "other", "general", "other issue"}
+                and ai_confidence >= 0.5
+            ):
+                upgraded_category_id = await _resolve_category_id_by_name(db, ai_suggested_category)
+                if upgraded_category_id is not None:
+                    complaint.category_id = upgraded_category_id
+                    upgraded_category = await db.get(Category, upgraded_category_id)
+                    if upgraded_category:
+                        cat_name = upgraded_category.name
         else:
             cat_name = ai_data.get("category", "Other")
             mapped_category_id = await _resolve_category_id_by_name(db, cat_name)
@@ -606,6 +759,7 @@ async def _process_complaint(complaint: Complaint, db: AsyncSession):
 @router.post("", response_model=ComplaintOut, status_code=201)
 async def create_complaint(
     body: ComplaintCreate,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user_optional),
 ):
@@ -645,12 +799,23 @@ async def create_complaint(
 
     if body.input_type == "image" and resolved_category_id is None and body.raw_image_url:
         image_ai = await _analyze_image_data_url(body.raw_image_url)
-        category_name = image_ai.get("category")
-        resolved_category_id = await _resolve_category_id_by_name(db, category_name)
+        category_name = image_ai.get("category") or _infer_category_name_from_image_analysis(image_ai)
+        image_confidence = float(image_ai.get("category_confidence") or 0)
+        normalized_image_category = _normalize_category_name(category_name or "")
+        is_weak_other = normalized_image_category in {"other", "general", "other issue"} or image_confidence < 0.55
+        if not is_weak_other:
+            resolved_category_id = await _resolve_category_id_by_name(db, category_name)
 
         # If no details were provided, use image model summary as base text for AI pipeline.
         if not resolved_raw_text:
-            resolved_raw_text = (image_ai.get("official_summary") or image_ai.get("issue_description") or "").strip() or None
+            base_summary = (image_ai.get("official_summary") or image_ai.get("issue_description") or "").strip()
+            label_text = ""
+            if isinstance(image_ai.get("vision_labels"), list):
+                top_labels = [str(label).strip() for label in image_ai.get("vision_labels")[:6] if str(label).strip()]
+                if top_labels:
+                    label_text = f" Visual hints: {', '.join(top_labels)}."
+            enriched_summary = f"{base_summary}{label_text}".strip()
+            resolved_raw_text = enriched_summary or None
 
     resolved_geo_lat = body.geo_latitude
     resolved_geo_lng = body.geo_longitude
@@ -663,6 +828,19 @@ async def create_complaint(
         if resolved_geo_lng is None and exif_payload.get("longitude") is not None:
             resolved_geo_lng = exif_payload.get("longitude")
         exif_captured_at = exif_payload.get("captured_at")
+
+    # Safety: reject invalid coordinate ranges when client metadata is malformed.
+    if resolved_geo_lat is not None and not (-90 <= float(resolved_geo_lat) <= 90):
+        resolved_geo_lat = None
+    if resolved_geo_lng is not None and not (-180 <= float(resolved_geo_lng) <= 180):
+        resolved_geo_lng = None
+
+    # Fallback for downloaded/no-EXIF images: use ward centroid for reliable ward routing.
+    if (resolved_geo_lat is None or resolved_geo_lng is None) and resolved_ward_id is not None:
+        ward_for_geo = await db.get(Ward, resolved_ward_id)
+        if ward_for_geo and ward_for_geo.latitude is not None and ward_for_geo.longitude is not None:
+            resolved_geo_lat = float(ward_for_geo.latitude)
+            resolved_geo_lng = float(ward_for_geo.longitude)
 
     # KB-assisted geo mapping from uploaded image metadata
     geo_ward = None
@@ -689,6 +867,16 @@ async def create_complaint(
                 resolved_ward_number = int(ward_obj.ward_number)
 
         resolved_raw_text = _build_voice_fallback_summary(resolved_category_name, resolved_ward_number)
+
+    probable_duplicate = await _find_probable_duplicate_complaint(
+        db,
+        text=resolved_raw_text,
+        ward_id=resolved_ward_id,
+        category_id=resolved_category_id,
+    )
+    if probable_duplicate:
+        response.status_code = 200
+        return ComplaintOut.model_validate(probable_duplicate)
 
     # Create or find citizen
     citizen = None
@@ -728,6 +916,10 @@ async def create_complaint(
         complaint.ai_longitude = resolved_geo_lng
     if geo_ward:
         complaint.ai_location = f"Geo-tagged near {geo_ward['name']}"
+    elif resolved_geo_lat is not None and resolved_geo_lng is not None and resolved_ward_id is not None:
+        ward_obj = await db.get(Ward, resolved_ward_id)
+        if ward_obj:
+            complaint.ai_location = f"Approx location mapped to Ward {ward_obj.ward_number} centroid"
     if exif_captured_at and not complaint.ai_location:
         complaint.ai_location = f"Image captured at {exif_captured_at.strftime('%d-%b-%Y %H:%M')}"
 
@@ -1140,6 +1332,14 @@ async def assign_complaint(
 
     await db.flush()
     await db.refresh(complaint)
+
+    refreshed_result = await db.execute(
+        _complaint_query().where(Complaint.id == complaint.id)
+    )
+    refreshed_complaint = refreshed_result.scalar_one_or_none()
+    if refreshed_complaint:
+        return ComplaintOut.model_validate(refreshed_complaint)
+
     return ComplaintOut.model_validate(complaint)
 
 

@@ -382,6 +382,21 @@ def _source_code(input_type: Optional[str]) -> str:
     return mapping.get((input_type or "").lower(), "GEN")
 
 
+def _scoped_ward_for_user(user) -> Optional[int]:
+    """Return ward scope for roles that must stay within their ward."""
+    if not user:
+        return None
+
+    role = (getattr(user, "role", None) or "").upper()
+    ward_scoped_roles = {"LEADER", "WORKER", "OFFICER", "ENGINEER"}
+    ward_id = getattr(user, "ward_id", None)
+
+    if role in ward_scoped_roles and ward_id:
+        return ward_id
+
+    return None
+
+
 async def _generate_complaint_code(
     db: AsyncSession,
     complaint: Complaint,
@@ -762,6 +777,10 @@ async def list_complaints(
     user=Depends(get_current_user_optional),
 ):
     stmt = _complaint_query()
+    scoped_ward_id = _scoped_ward_for_user(user)
+
+    if scoped_ward_id:
+        stmt = stmt.where(Complaint.ward_id == scoped_ward_id)
 
     if status:
         stmt = stmt.where(Complaint.status == status)
@@ -862,8 +881,11 @@ async def priority_queue(
     per_page: int = Query(20, ge=1, le=100),
     ward_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user_optional),
 ):
     """Return complaints sorted by priority score descending."""
+    scoped_ward_id = _scoped_ward_for_user(user)
+
     stmt = _complaint_query().where(
         Complaint.status.in_([
             "OPEN",
@@ -873,6 +895,8 @@ async def priority_queue(
             "VERIFICATION_PENDING",
         ])
     )
+    if scoped_ward_id:
+        stmt = stmt.where(Complaint.ward_id == scoped_ward_id)
     if ward_id:
         stmt = stmt.where(Complaint.ward_id == ward_id)
 
@@ -891,39 +915,53 @@ async def priority_queue(
 
 
 @router.get("/stats", response_model=ComplaintStats)
-async def complaint_stats(db: AsyncSession = Depends(get_db)):
+async def complaint_stats(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user_optional),
+):
+    scoped_ward_id = _scoped_ward_for_user(user)
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total = (await db.execute(select(func.count()).select_from(Complaint))).scalar() or 0
+    ward_scope = []
+    if scoped_ward_id:
+        ward_scope.append(Complaint.ward_id == scoped_ward_id)
+
+    total = (await db.execute(select(func.count()).select_from(Complaint).where(*ward_scope))).scalar() or 0
     total_open = (await db.execute(
         select(func.count()).select_from(Complaint).where(
+            *ward_scope,
             Complaint.status.in_(["OPEN", "ASSIGNED", "IN_PROGRESS"])
         )
     )).scalar() or 0
     total_in_progress = (await db.execute(
         select(func.count()).select_from(Complaint).where(
+            *ward_scope,
             Complaint.status == "IN_PROGRESS"
         )
     )).scalar() or 0
     total_pending = (await db.execute(
         select(func.count()).select_from(Complaint).where(
+            *ward_scope,
             Complaint.status.in_(["OPEN", "UNDER_REVIEW", "ASSIGNED", "VERIFICATION_PENDING"])
         )
     )).scalar() or 0
     total_critical = (await db.execute(
         select(func.count()).select_from(Complaint).where(
+            *ward_scope,
             Complaint.priority_level == "CRITICAL",
             Complaint.status.in_(["OPEN", "ASSIGNED", "IN_PROGRESS"]),
         )
     )).scalar() or 0
     resolved_today = (await db.execute(
         select(func.count()).select_from(Complaint).where(
+            *ward_scope,
             Complaint.status.in_(["VERIFIED", "CLOSED"]),
             Complaint.resolved_at >= today_start,
         )
     )).scalar() or 0
     total_resolved = (await db.execute(
         select(func.count()).select_from(Complaint).where(
+            *ward_scope,
             Complaint.status.in_(["RESOLVED", "VERIFIED", "CLOSED"])
         )
     )).scalar() or 0
@@ -931,7 +969,7 @@ async def complaint_stats(db: AsyncSession = Depends(get_db)):
     avg_resolution_hours = (await db.execute(
         select(
             func.avg(func.extract("epoch", Complaint.resolved_at - Complaint.created_at) / 3600)
-        ).where(Complaint.resolved_at.isnot(None))
+        ).where(*ward_scope, Complaint.resolved_at.isnot(None))
     )).scalar()
 
     return ComplaintStats(
@@ -953,7 +991,12 @@ async def complaints_by_ward(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user_optional),
 ):
+    scoped_ward_id = _scoped_ward_for_user(user)
+    if scoped_ward_id and scoped_ward_id != ward_id:
+        raise HTTPException(status_code=403, detail="You can only view complaints from your own ward")
+
     stmt = _complaint_query().where(Complaint.ward_id == ward_id)
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -1048,6 +1091,12 @@ async def assign_complaint(
     if user.role not in ("LEADER", "DEPARTMENT_HEAD", "ADMIN"):
         raise HTTPException(status_code=403, detail="Only leadership roles can assign complaints")
 
+    if complaint.ward_id is None:
+        raise HTTPException(status_code=400, detail="Complaint ward is not resolved yet")
+
+    if user.role == "LEADER" and user.ward_id and complaint.ward_id != user.ward_id:
+        raise HTTPException(status_code=403, detail="Leaders can assign complaints only in their ward")
+
     assignee_result = await db.execute(select(User).where(User.id == body.assigned_to))
     assignee = assignee_result.scalar_one_or_none()
     if not assignee:
@@ -1059,7 +1108,7 @@ async def assign_complaint(
             detail="Assignee must be WORKER, OFFICER, ENGINEER, or DEPARTMENT_HEAD",
         )
 
-    if complaint.ward_id and assignee.ward_id and complaint.ward_id != assignee.ward_id:
+    if assignee.ward_id != complaint.ward_id:
         raise HTTPException(status_code=400, detail="Assignee must belong to the same ward as complaint")
 
     old_status = complaint.status
@@ -1110,20 +1159,22 @@ async def assignment_recommendations(
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
+    if complaint.ward_id is None:
+        raise HTTPException(status_code=400, detail="Complaint ward is not resolved yet")
+
+    if user.role == "LEADER" and user.ward_id and complaint.ward_id != user.ward_id:
+        raise HTTPException(status_code=403, detail="Leaders can view recommendations only in their ward")
+
     users_result = await db.execute(
         select(User).where(User.role.in_(["WORKER", "OFFICER", "ENGINEER", "DEPARTMENT_HEAD"]))
     )
     all_candidates = users_result.scalars().all()
 
-    candidates = []
-    for candidate in all_candidates:
-        if complaint.ward_id and candidate.ward_id and candidate.ward_id != complaint.ward_id:
-            continue
-
-        candidates.append(candidate)
-
-    if not candidates:
-        candidates = all_candidates
+    candidates = [
+        candidate
+        for candidate in all_candidates
+        if candidate.ward_id == complaint.ward_id
+    ]
 
     recommendations = recommend_assignees(complaint, candidates)
     recommendation_items = [

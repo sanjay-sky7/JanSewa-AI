@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+import asyncio
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -24,10 +26,26 @@ from app.routers import (
 
 
 # ── Lifespan (startup / shutdown) ───────────────────────
+logger = logging.getLogger(__name__)
+
+
+async def _maybe_seed_demo_data() -> None:
+    if not settings.AUTO_SEED_DEMO:
+        return
+
+    try:
+        from seed_data import seed
+        await asyncio.to_thread(seed)
+        logger.info("Demo data seed completed.")
+    except Exception as exc:
+        logger.warning("Demo data seed skipped due to error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+    await _maybe_seed_demo_data()
     yield
     # Shutdown (nothing to tear down for now)
 

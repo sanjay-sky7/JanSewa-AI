@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # ── Database ─────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/jansewa"
     DATABASE_SYNC_URL: str = "postgresql://postgres:postgres@localhost:5432/jansewa"
+    AUTO_SEED_DEMO: bool = True
 
     # ── Redis ────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"

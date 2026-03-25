@@ -4,35 +4,15 @@ import { authAPI } from '../services/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem('jansewa_user');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Verify token on mount
+  // Force explicit sign-in on every fresh app load.
   useEffect(() => {
-    const token = localStorage.getItem('jansewa_token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    authAPI
-      .me()
-      .then((res) => {
-        setUser(res.data);
-        localStorage.setItem('jansewa_user', JSON.stringify(res.data));
-      })
-      .catch(() => {
-        localStorage.removeItem('jansewa_token');
-        localStorage.removeItem('jansewa_user');
-        setUser(null);
-      })
-      .finally(() => setLoading(false));
+    localStorage.removeItem('jansewa_token');
+    localStorage.removeItem('jansewa_user');
+    setUser(null);
+    setLoading(false);
   }, []);
 
   const login = useCallback(async (email, password) => {
